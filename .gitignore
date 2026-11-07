@@ -179,3 +179,11 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# Binary executables and installers
+*.exe
+dist_installer/
+output/graded_sheets/
+output/web_uploads/
+output/*.pdf
+output/BANG_DIEM_TONG_HOP.xlsx
