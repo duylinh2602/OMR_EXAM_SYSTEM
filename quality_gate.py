@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 MODULE TIỀN KIỂM ĐỊNH CHẤT LƯỢNG ẢNH ĐẦU VÀO (INPUT QUALITY GATE)
-Kiểm tra tính hợp lệ trước khi đưa vào pipeline nhận diện OMR.
+Kiểm tra độ nét và ánh sáng trước khi đưa vào pipeline nhận diện OMR.
 """
 from typing import Dict, Any, Tuple
 import cv2
@@ -11,14 +11,14 @@ import numpy as np
 
 class ImageQualityAssessment:
     # Ngưỡng Laplacian Variance tối thiểu để không bị mờ nhòe (Motion Blur)
-    BLUR_THRESHOLD: float = 80.0
+    BLUR_THRESHOLD: float = 60.0
     # Độ tương phản tối thiểu (độ lệch chuẩn độ xám toàn trang)
-    CONTRAST_MIN_STD: float = 20.0
-    # Độ sáng trung bình tối thiểu và tối đa [50, 245]
-    MIN_MEAN_BRIGHTNESS: float = 50.0
-    MAX_MEAN_BRIGHTNESS: float = 245.0
+    CONTRAST_MIN_STD: float = 18.0
+    # Độ sáng trung bình tối thiểu và tối đa [40, 248]
+    MIN_MEAN_BRIGHTNESS: float = 40.0
+    MAX_MEAN_BRIGHTNESS: float = 248.0
     # Tỷ lệ pixel quá tối (underexposed) hoặc quá sáng (burned out) tối đa
-    MAX_EXTREME_PIXELS_RATIO: float = 0.35
+    MAX_EXTREME_PIXELS_RATIO: float = 0.40
 
     @classmethod
     def evaluate(cls, image_bgr: np.ndarray) -> Tuple[bool, Dict[str, Any]]:
@@ -45,14 +45,10 @@ class ImageQualityAssessment:
         is_brightness_ok = cls.MIN_MEAN_BRIGHTNESS <= mean_val <= cls.MAX_MEAN_BRIGHTNESS
 
         # 4. Đánh giá tỷ lệ bóng đen gắt và cháy sáng gắt
-        dark_pixels = np.sum(gray < 40)
-        bright_pixels = np.sum(gray > 250)
+        dark_pixels = np.sum(gray < 35)
+        bright_pixels = np.sum(gray > 252)
         extreme_ratio = float((dark_pixels + bright_pixels) / (h * w))
         is_lighting_acceptable = extreme_ratio <= cls.MAX_EXTREME_PIXELS_RATIO
-
-        # 5. Đánh giá tỷ lệ khung hình (Khổ giấy A4 ~ 1.414, Camera điện thoại 4:3 ~ 1.33, 16:9 ~ 1.78)
-        aspect_ratio = float(h / w) if h > w else float(w / h)
-        is_aspect_ok = 1.20 <= aspect_ratio <= 1.85
 
         # Tổng hợp kết quả
         reasons = []
@@ -67,8 +63,6 @@ class ImageQualityAssessment:
                 reasons.append(f"Ảnh bị chói lóa/cháy sáng toàn trang (Độ sáng TB: {mean_val:.1f} > {cls.MAX_MEAN_BRIGHTNESS})")
         if not is_lighting_acceptable:
             reasons.append(f"Vùng bóng đen hoặc cháy sáng quá lớn ({extreme_ratio * 100:.1f}% diện tích)")
-        if not is_aspect_ok:
-            reasons.append(f"Tỷ lệ khung hình không khớp khổ chụp bài thi chuẩn (Aspect: {aspect_ratio:.2f})")
 
         is_passed = len(reasons) == 0
 
@@ -80,7 +74,6 @@ class ImageQualityAssessment:
                 "contrast_std": round(std_dev, 1),
                 "mean_brightness": round(mean_val, 1),
                 "extreme_lighting_ratio": round(extreme_ratio, 3),
-                "aspect_ratio": round(aspect_ratio, 2),
                 "resolution": f"{w}x{h}"
             }
         }

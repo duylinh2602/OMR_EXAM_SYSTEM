@@ -505,6 +505,9 @@ async def grade_single_file(file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="Không thể giải mã file ảnh.")
         sub_id = str(uuid.uuid4())[:8]
         res = _process_and_save(img_bgr, file.filename, sub_id, exam)
+        if res.get("has_error") and sub_id in exam["submissions"]:
+            # Khong luu loi tam thoi khi quet truc tiep vao bang diem
+            del exam["submissions"][sub_id]
         new_subs.append(res)
 
     save_to_disk()

@@ -22,33 +22,74 @@
       padding-top: env(safe-area-inset-top);
       padding-bottom: env(safe-area-inset-bottom);
     }
-    .viewfinder-mask { box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.72); }
-    .target-reticle {
-      width: 48px; height: 48px; position: absolute;
-      display: flex; align-items: center; justify-content: center;
-      transition: all 0.15s ease-out; z-index: 20;
+    .viewfinder-mask { box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.70); }
+    
+    /* Khung ngắm góc quang học kiểu bracket mở (như app chuyên nghiệp) */
+    .target-corner {
+      position: absolute;
+      width: 50px;
+      height: 50px;
+      transition: all 0.12s ease-out;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      z-index: 20;
     }
-    .reticle-red {
-      border: 3px solid #ef4444; background-color: rgba(239, 68, 68, 0.15);
-      box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+    .corner-tl { top: -2px; left: -2px; border-top: 4px solid #10b981; border-left: 4px solid #10b981; border-top-left-radius: 14px; }
+    .corner-tr { top: -2px; right: -2px; border-top: 4px solid #10b981; border-right: 4px solid #10b981; border-top-right-radius: 14px; }
+    .corner-bl { bottom: -2px; left: -2px; border-bottom: 4px solid #10b981; border-left: 4px solid #10b981; border-bottom-left-radius: 14px; }
+    .corner-br { bottom: -2px; right: -2px; border-bottom: 4px solid #10b981; border-right: 4px solid #10b981; border-bottom-right-radius: 14px; }
+
+    .target-corner.unmatched {
+      border-color: rgba(52, 211, 153, 0.45);
+      background-color: rgba(16, 185, 129, 0.04);
     }
-    .reticle-red::after { content: '+'; color: #ef4444; font-size: 24px; font-weight: 900; }
-    .reticle-green {
-      border: 3px solid #10b981 !important; background-color: rgba(16, 185, 129, 0.3) !important;
-      box-shadow: 0 0 18px rgba(16, 185, 129, 0.9) !important; transform: scale(1.08);
+    .target-corner.matched {
+      border-color: #10b981 !important;
+      background-color: rgba(16, 185, 129, 0.28) !important;
+      box-shadow: 0 0 16px rgba(16, 185, 129, 0.85);
+      transform: scale(1.05);
     }
-    .reticle-green::after { content: '✓'; color: #10b981; font-size: 24px; font-weight: 900; }
+    .target-corner.matched::after {
+      content: '✓';
+      color: #10b981;
+      font-size: 16px;
+      font-weight: 900;
+      background: rgba(0, 0, 0, 0.6);
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: absolute;
+    }
     
     .tab-content { display: none; }
     .tab-content.active { display: flex; }
     
-    /* Custom Scrollbar for Results */
+    /* Tùy chỉnh thanh cuộn */
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-track { background: #0f172a; }
     ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
   </style>
 </head>
 <body class="h-screen w-screen flex flex-col justify-between text-white font-sans select-none overflow-hidden">
+
+  <!-- CẢNH BÁO KHI MỞ TRONG TRÌNH DUYỆT NHÚNG (ZALO / MESSENGER) -->
+  <div id="inAppBrowserAlert" class="hidden bg-amber-500 text-slate-950 px-3 py-1.5 text-[11px] font-bold flex justify-between items-center z-50 shrink-0">
+    <span>💡 Nếu camera không hiện: Bấm dấu (⋮) góc trên chọn <b>"Mở bằng trình duyệt" (Chrome/Safari)</b></span>
+    <button onclick="this.parentElement.remove()" class="px-1.5 py-0.5 bg-black/20 rounded font-bold">✕</button>
+  </div>
+
+  <!-- FLOATING TOAST NOTIFICATION (THAY THẾ WINDOW.ALERT ĐỂ KHÔNG ĐƠ CAMERA) -->
+  <div id="floatingToast" class="fixed top-14 left-4 right-4 z-50 pointer-events-none transition-all duration-300 transform -translate-y-12 opacity-0 flex justify-center">
+    <div id="floatingToastContent" class="bg-rose-950/95 border border-rose-500 text-rose-200 px-4 py-2.5 rounded-2xl shadow-2xl backdrop-blur text-xs font-semibold flex items-center gap-2 max-w-sm text-center">
+      <span id="toastIcon">⚠️</span>
+      <span id="toastMsg">Thông báo</span>
+    </div>
+  </div>
 
   <!-- ========================================================================= -->
   <!-- TOP HEADER (DÙNG CHUNG) -->
@@ -84,45 +125,80 @@
     <!-- ----------------------------------------------------------------------- -->
     <!-- TAB 1: CAMERA SCANNER -->
     <!-- ----------------------------------------------------------------------- -->
-    <div id="tabScanner" class="tab-content active relative flex-1 w-full flex-col items-center justify-center overflow-hidden">
-      <video id="videoElement" playsinline autoplay class="absolute w-full h-full object-cover"></video>
+    <div id="tabScanner" class="tab-content active relative flex-1 w-full flex-col items-center justify-between overflow-hidden">
+      <!-- Thẻ video với muted playsinline bắt buộc để autoplay trên mobile -->
+      <video id="videoElement" autoplay playsinline muted class="absolute w-full h-full object-cover"></video>
 
-      <!-- Khung ngắm A4 -->
-      <div id="viewfinder" class="relative z-10 w-[86%] max-w-[340px] aspect-[1/1.414] border-2 border-red-500/70 rounded-2xl viewfinder-mask transition-all duration-200 flex flex-col justify-between p-2 pointer-events-none">
-        <div id="reticle-tl" class="target-reticle reticle-red top-2 left-2 rounded-xl"></div>
-        <div id="reticle-tr" class="target-reticle reticle-red top-2 right-2 rounded-xl"></div>
-        <div id="reticle-bl" class="target-reticle reticle-red bottom-2 left-2 rounded-xl"></div>
-        <div id="reticle-br" class="target-reticle reticle-red bottom-2 right-2 rounded-xl"></div>
-
-        <div class="w-full text-center text-[9px] text-slate-400 font-mono tracking-widest mt-1">MỐC TRÊN</div>
-        
-        <!-- HỘP HƯỚNG DẪN ĐIỀU HƯỚNG -->
-        <div id="guidanceBox" class="text-center text-xs font-bold text-amber-300 bg-black/85 px-4 py-2 rounded-full mx-auto shadow-xl border border-amber-500/50 transition-all flex items-center gap-1.5 pointer-events-auto">
-          <span id="guideIcon">🔍</span>
-          <span id="guideText">Đưa 4 góc bài thi vào 4 ô vuông ngắm</span>
+      <!-- SUB-HEADER HƯỚNG DẪN QUÉT (GIỐNG APP THI MẪU) -->
+      <div class="w-full bg-slate-950/80 backdrop-blur px-4 py-2 border-b border-slate-800 shrink-0 text-center z-20">
+        <div class="text-xs font-bold text-emerald-400 flex items-center justify-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+          <span>Quét và chấm liên tục</span>
         </div>
-
-        <div class="w-full text-center text-[9px] text-slate-400 font-mono tracking-widest mb-1">MỐC DƯỚI</div>
+        <p id="guideText" class="text-[11px] text-slate-300 mt-0.5 leading-tight">
+          Căn 4 mốc đen góc vào 4 khung ngắm. Giữ chắc tay hoặc bấm 'Chụp và chấm ngay'.
+        </p>
       </div>
 
-      <!-- THANH ĐIỀU KHIỂN CAMERA PHÍA TRÊN NÚT BẤM -->
-      <div class="absolute bottom-4 left-0 right-0 z-20 px-6 flex justify-around items-center">
-        <button onclick="switchCamera()" class="p-3 bg-slate-900/80 backdrop-blur rounded-full text-slate-300 border border-slate-700 active:scale-95 transition" title="Đổi camera">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-        </button>
+      <!-- KHUNG NGẮM TỶ LỆ CHUẨN 4 MỐC M0 - M4 (1:1.444) -->
+      <div class="flex-1 w-full flex items-center justify-center relative pointer-events-none my-1">
+        <div id="viewfinder" class="relative w-[88%] max-w-[330px] aspect-[1/1.444] border-2 border-dashed border-emerald-400/70 rounded-2xl viewfinder-mask transition-all duration-150 flex flex-col justify-between p-1">
+          <!-- 4 Khung ngắm góc Bracket -->
+          <div id="reticle-tl" class="target-corner corner-tl unmatched"></div>
+          <div id="reticle-tr" class="target-corner corner-tr unmatched"></div>
+          <div id="reticle-bl" class="target-corner corner-bl unmatched"></div>
+          <div id="reticle-br" class="target-corner corner-br unmatched"></div>
 
-        <!-- Nút chụp tay -->
-        <button id="snapBtn" onclick="triggerManualCapture()" class="w-16 h-16 rounded-full border-4 border-white bg-emerald-600 hover:bg-emerald-500 active:scale-90 transition flex items-center justify-center shadow-lg shadow-emerald-600/40">
-          <div class="w-12 h-12 rounded-full border-2 border-black/20 bg-white"></div>
-        </button>
+          <div class="w-full text-center text-[9px] text-emerald-300/70 font-mono tracking-widest mt-1">MỐC ĐẦU ĐỀ (M0)</div>
+          
+          <!-- HỘP TRẠNG THÁI KHÓA MỤC TIÊU -->
+          <div id="guidanceBox" class="text-center text-[11px] font-bold text-amber-300 bg-black/85 px-3 py-1.5 rounded-full mx-auto shadow-xl border border-amber-500/50 transition-all flex items-center gap-1.5 pointer-events-auto">
+            <span id="guideIcon">🎯</span>
+            <span id="guideBoxText">Đưa 4 góc mốc đen vào khung</span>
+          </div>
 
-        <button onclick="toggleTorch()" class="p-3 bg-slate-900/80 backdrop-blur rounded-full text-slate-300 border border-slate-700 active:scale-95 transition" title="Đèn Flash">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-        </button>
+          <div class="w-full text-center text-[9px] text-emerald-300/70 font-mono tracking-widest mb-1">MỐC CUỐI ĐỀ (M4)</div>
+        </div>
+      </div>
+
+      <!-- THANH ĐIỀU KHIỂN HÀNH ĐỘNG CAMERA -->
+      <div class="w-full z-20 flex flex-col items-center gap-2 pb-2 shrink-0 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent pt-3 px-4">
+        
+        <!-- HÀNG NÚT CHÍNH: CHỤP VÀ CHẤM NGAY + ĐÈN FLASH -->
+        <div class="w-full flex justify-center items-center gap-2 max-w-sm">
+          <!-- NÚT CHỤP VÀ CHẤM NGAY NỔI BẬT TO RÕ RÀNG -->
+          <button id="btnSnapInstant" onclick="triggerManualCapture()" class="flex-1 py-3 bg-white hover:bg-slate-100 active:scale-95 text-slate-950 rounded-full font-black text-xs shadow-2xl flex items-center justify-center gap-2 border-2 border-emerald-400 transition">
+            <svg class="w-4 h-4 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"></path>
+            </svg>
+            <span>Chụp và chấm ngay</span>
+          </button>
+
+          <!-- NÚT BẬT ĐÈN FLASH HỖ TRỢ -->
+          <button id="btnTorchToggle" onclick="toggleTorch()" class="px-4 py-3 bg-slate-900/90 text-amber-300 hover:text-white rounded-full font-bold text-xs border border-slate-700 shadow-xl flex items-center justify-center gap-1.5 active:scale-95 transition">
+            <span>⚡</span>
+            <span id="torchLabel">Bật đèn</span>
+          </button>
+        </div>
+
+        <!-- HÀNG NÚT PHỤ: ĐỔI CAMERA + CHỤP BẰNG APP GỐC -->
+        <div class="w-full flex justify-between items-center max-w-sm px-2 text-slate-400">
+          <button onclick="switchCamera()" class="p-2 bg-slate-900/80 rounded-full border border-slate-700 active:scale-95 transition text-xs flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            <span>Đổi cam</span>
+          </button>
+
+          <!-- Nút Chụp bằng camera gốc máy (Luôn hoạt động 100% khi trình duyệt chặn WebRTC) -->
+          <button onclick="document.getElementById('nativeCameraInput').click()" class="px-3 py-1.5 bg-indigo-600/90 hover:bg-indigo-500 text-white rounded-full text-[11px] font-bold shadow flex items-center gap-1.5 border border-indigo-400 active:scale-95 transition">
+            <svg class="w-3.5 h-3.5 text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path></svg>
+            <span>Chụp máy gốc</span>
+          </button>
+        </div>
+
       </div>
 
       <!-- TOAST THÔNG BÁO KẾT QUẢ VỪA CHẤM XONG -->
-      <div id="recentResultDrawer" class="absolute bottom-24 left-4 right-4 z-30 bg-slate-900/95 border border-emerald-500/60 rounded-2xl p-3.5 shadow-2xl backdrop-blur hidden flex items-center justify-between transition-all">
+      <div id="recentResultDrawer" class="absolute bottom-28 left-4 right-4 z-30 bg-slate-900/95 border border-emerald-500/60 rounded-2xl p-3.5 shadow-2xl backdrop-blur hidden flex items-center justify-between transition-all">
         <div class="flex items-center gap-3">
           <div class="w-12 h-12 bg-emerald-600/30 border border-emerald-500 rounded-xl flex flex-col items-center justify-center shrink-0">
             <span class="text-[9px] text-emerald-300 font-bold uppercase">Điểm</span>
@@ -238,6 +314,9 @@
 
   </div>
 
+  <!-- INPUT FILE ẨN ĐỂ MỞ CAMERA GỐC ĐIỆN THOẠI (DỰ PHÒNG KHI CẦN) -->
+  <input type="file" id="nativeCameraInput" accept="image/*" capture="environment" class="hidden" onchange="handleNativeCameraCapture(event)">
+
   <!-- ========================================================================= -->
   <!-- MODAL XEM CHI TIẾT ẢNH BÀI CHẤM BÚT ĐỎ -->
   <!-- ========================================================================= -->
@@ -289,6 +368,8 @@
     let opticalInterval = null;
     let deferredPrompt = null;
     let latestSubId = null;
+    let isTorchOn = false;
+    let toastTimer = null;
 
     let sessionData = {
       active_exam_id: null,
@@ -304,6 +385,69 @@
       { id: "reticle-bl", name: "Dưới-Trái", matched: false },
       { id: "reticle-br", name: "Dưới-Phải", matched: false }
     ];
+
+    // Phát âm thanh phản hồi nhẹ nhàng bằng Web Audio API
+    function playBeep(isSuccess = true) {
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        
+        if (isSuccess) {
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+          osc.frequency.setValueAtTime(880, ctx.currentTime + 0.08); // A5
+          gain.gain.setValueAtTime(0.25, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+          osc.start(ctx.currentTime);
+          osc.stop(ctx.currentTime + 0.25);
+        } else {
+          osc.type = "triangle";
+          osc.frequency.setValueAtTime(220, ctx.currentTime);
+          gain.gain.setValueAtTime(0.2, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+          osc.start(ctx.currentTime);
+          osc.stop(ctx.currentTime + 0.2);
+        }
+      } catch (e) {}
+    }
+
+    // Hiển thị thông báo Toast không gây đơ camera
+    function showNotificationToast(msg, isError = true) {
+      const toast = document.getElementById("floatingToast");
+      const content = document.getElementById("floatingToastContent");
+      const icon = document.getElementById("toastIcon");
+      const text = document.getElementById("toastMsg");
+
+      if (isError) {
+        content.className = "bg-rose-950/95 border border-rose-500 text-rose-200 px-4 py-2.5 rounded-2xl shadow-2xl backdrop-blur text-xs font-semibold flex items-center gap-2 max-w-sm text-center";
+        icon.innerText = "⚠️";
+      } else {
+        content.className = "bg-emerald-950/95 border border-emerald-500 text-emerald-200 px-4 py-2.5 rounded-2xl shadow-2xl backdrop-blur text-xs font-semibold flex items-center gap-2 max-w-sm text-center";
+        icon.innerText = "✓";
+      }
+      text.innerText = msg;
+
+      toast.classList.remove("-translate-y-12", "opacity-0");
+      toast.classList.add("translate-y-0", "opacity-100");
+
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.classList.remove("translate-y-0", "opacity-100");
+        toast.classList.add("-translate-y-12", "opacity-0");
+      }, 3500);
+    }
+
+    // Kiểm tra nếu đang mở trong trình duyệt nhúng của ứng dụng (Zalo / FB / Messenger)
+    const ua = navigator.userAgent || "";
+    if (/Zalo|FBAN|FBAV|Instagram|Messenger|Line/i.test(ua)) {
+      const alertEl = document.getElementById("inAppBrowserAlert");
+      if (alertEl) alertEl.classList.remove("hidden");
+    }
 
     // =========================================================================
     // PWA & SERVICE WORKER REGISTRATION
@@ -329,7 +473,7 @@
           document.getElementById("btnPwaInstall").classList.add("hidden");
         });
       } else {
-        alert("Để cài App:\n- Trên iPhone (Safari): Bấm nút Chia Sẻ (Share) -> Chọn 'Thêm vào MH chính'.\n- Trên Android: Bấm menu 3 chấm -> Chọn 'Cài đặt ứng dụng'.");
+        alert("Để cài App:\n- Trên iPhone (Safari): Bấm nút Chia Sẻ (Share ⬆️) -> Chọn 'Thêm vào MH chính'.\n- Trên Android: Bấm menu 3 chấm (⋮) -> Chọn 'Cài đặt ứng dụng'.");
       }
     }
 
@@ -339,7 +483,15 @@
     window.addEventListener("DOMContentLoaded", async () => {
       await refreshSessionData();
       await startCamera();
-      opticalInterval = setInterval(runOpticalMarkerDetection, 120);
+      opticalInterval = setInterval(runOpticalMarkerDetection, 85);
+
+      // Chạm màn hình để bật video nếu bị chặn autoplay
+      document.body.addEventListener("click", () => {
+        const video = document.getElementById("videoElement");
+        if (video && video.paused) {
+          video.play().catch(e => {});
+        }
+      }, { once: true });
     });
 
     // =========================================================================
@@ -349,7 +501,6 @@
       document.querySelectorAll(".tab-content").forEach(el => el.classList.remove("active"));
       document.getElementById(tabId).classList.add("active");
 
-      // Cập nhật màu sắc nút thanh điều hướng
       const navs = {
         tabScanner: document.getElementById("navScanner"),
         tabResults: document.getElementById("navResults"),
@@ -364,10 +515,9 @@
         }
       });
 
-      // Tối ưu tài nguyên camera khi rời khỏi tab quét
       if (tabId === "tabScanner") {
         if (!currentStream) startCamera();
-        if (!opticalInterval) opticalInterval = setInterval(runOpticalMarkerDetection, 120);
+        if (!opticalInterval) opticalInterval = setInterval(runOpticalMarkerDetection, 85);
       } else {
         if (opticalInterval) { clearInterval(opticalInterval); opticalInterval = null; }
         if (tabId === "tabResults") renderSubmissionsList();
@@ -411,20 +561,63 @@
     }
 
     // =========================================================================
-    // CAMERA & THUẬT TOÁN NHẬN DIỆN MỐC QUANG HỌC
+    // CAMERA & NHẬN DIỆN MỐC QUANG HỌC TỐC ĐỘ CAO
     // =========================================================================
     async function startCamera() {
-      if (currentStream) currentStream.getTracks().forEach(t => t.stop());
+      if (currentStream) {
+        try {
+          currentStream.getTracks().forEach(t => t.stop());
+        } catch(e) {}
+        currentStream = null;
+      }
+
+      const video = document.getElementById("videoElement");
+      video.muted = true;
+      video.setAttribute("autoplay", "");
+      video.setAttribute("playsinline", "");
+      video.setAttribute("muted", "");
+
+      const constraintCandidates = [
+        { video: { facingMode: { ideal: facingMode }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false },
+        { video: { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+        { video: { facingMode: facingMode }, audio: false },
+        { video: true, audio: false }
+      ];
+
+      let stream = null;
+      let lastErr = null;
+
+      for (const c of constraintCandidates) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(c);
+          if (stream) break;
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+
+      if (!stream) {
+        console.warn("Camera getUserMedia failed:", lastErr);
+        showNotificationToast("Không mở được camera trực tiếp. Hãy bấm 'Chụp máy gốc'!", true);
+        return;
+      }
+
       try {
-        currentStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: facingMode }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-          audio: false
-        });
-        const video = document.getElementById("videoElement");
-        video.srcObject = currentStream;
-        videoTrack = currentStream.getVideoTracks()[0];
-      } catch (err) {
-        alert("Lỗi Camera: " + err.message);
+        currentStream = stream;
+        video.srcObject = stream;
+        videoTrack = stream.getVideoTracks()[0];
+
+        video.onloadedmetadata = async () => {
+          try {
+            await video.play();
+          } catch (e) {
+            console.warn("Video play error on metadata:", e);
+          }
+        };
+
+        await video.play();
+      } catch (e) {
+        console.warn("Video play initial warning:", e);
       }
     }
 
@@ -435,17 +628,23 @@
 
     async function toggleTorch() {
       if (videoTrack && videoTrack.getCapabilities && videoTrack.getCapabilities().torch) {
-        const s = videoTrack.getSettings();
-        await videoTrack.applyConstraints({ advanced: [{ torch: !s.torch }] });
+        try {
+          isTorchOn = !isTorchOn;
+          await videoTrack.applyConstraints({ advanced: [{ torch: isTorchOn }] });
+          document.getElementById("torchLabel").innerText = isTorchOn ? "Tắt đèn" : "Bật đèn";
+        } catch (e) {
+          showNotificationToast("Không thể điều khiển đèn Flash: " + e.message, true);
+        }
       } else {
-        alert("Thiết bị không hỗ trợ bật đèn Flash.");
+        showNotificationToast("Thiết bị không hỗ trợ bật đèn Flash trực tiếp.", true);
       }
     }
 
+    // Thuật toán quang học quét mốc đen tốc độ cao (85ms/chu kỳ)
     function runOpticalMarkerDetection() {
       if (isGrading) return;
       const video = document.getElementById("videoElement");
-      if (!video || video.readyState !== 4) return;
+      if (!video || video.readyState < 2 || video.paused) return;
 
       const vw = video.videoWidth;
       const vh = video.videoHeight;
@@ -468,8 +667,8 @@
         const el = document.getElementById(reticle.id);
         const rect = el.getBoundingClientRect();
 
-        const sampleW = Math.round((rect.width / scale) * 1.3);
-        const sampleH = Math.round((rect.height / scale) * 1.3);
+        const sampleW = Math.round((rect.width / scale) * 1.2);
+        const sampleH = Math.round((rect.height / scale) * 1.2);
         const vidX = Math.round((rect.left + rect.width / 2 - offsetX) / scale);
         const vidY = Math.round((rect.top + rect.height / 2 - offsetY) / scale);
 
@@ -487,23 +686,24 @@
         }
 
         const contrast = maxLum - minLum;
-        const thresh = minLum + contrast * 0.45;
+        const thresh = minLum + contrast * 0.42;
         let darkPixels = 0;
         for (let i = 0; i < imgData.length; i += 4) {
           const lum = 0.299 * imgData[i] + 0.587 * imgData[i + 1] + 0.114 * imgData[i + 2];
           if (lum <= thresh) darkPixels++;
         }
 
-        const isMatched = (contrast >= 24.0 && darkPixels >= 18 && darkPixels <= 950);
+        // Mốc đen hợp lệ: có độ tương phản với giấy trắng và số pixel tối tương thích diện tích mốc
+        const isMatched = (contrast >= 28.0 && maxLum >= 115 && minLum <= 100 && darkPixels >= 20 && darkPixels <= 920);
         reticle.matched = isMatched;
 
         if (isMatched) {
-          el.classList.remove("reticle-red");
-          el.classList.add("reticle-green");
+          el.classList.remove("unmatched");
+          el.classList.add("matched");
           matchedCount++;
         } else {
-          el.classList.remove("reticle-green");
-          el.classList.add("reticle-red");
+          el.classList.remove("matched");
+          el.classList.add("unmatched");
         }
       });
 
@@ -512,20 +712,17 @@
 
     function updateGuidanceUI(matchedCount) {
       const guideBox = document.getElementById("guidanceBox");
-      const guideText = document.getElementById("guideText");
+      const guideBoxText = document.getElementById("guideBoxText");
       const guideIcon = document.getElementById("guideIcon");
+      const guideSubText = document.getElementById("guideText");
       const viewfinder = document.getElementById("viewfinder");
 
-      const tl = RETICLES[0].matched;
-      const tr = RETICLES[1].matched;
-      const bl = RETICLES[2].matched;
-      const br = RETICLES[3].matched;
-
       if (matchedCount === 4) {
-        viewfinder.className = "relative z-10 w-[86%] max-w-[340px] aspect-[1/1.414] border-2 border-emerald-400 rounded-2xl viewfinder-mask shadow-[0_0_25px_rgba(16,185,129,0.7)] transition-all flex flex-col justify-between p-2 pointer-events-none";
-        guideBox.className = "text-center text-xs font-bold text-emerald-200 bg-emerald-950/95 px-4 py-2 rounded-full mx-auto shadow-xl border border-emerald-500 animate-pulse flex items-center gap-1.5 pointer-events-auto";
+        viewfinder.className = "relative w-[88%] max-w-[330px] aspect-[1/1.444] border-2 border-emerald-400 rounded-2xl viewfinder-mask shadow-[0_0_24px_rgba(16,185,129,0.8)] transition-all flex flex-col justify-between p-1";
+        guideBox.className = "text-center text-[11px] font-bold text-emerald-200 bg-emerald-950/95 px-4 py-1.5 rounded-full mx-auto shadow-xl border border-emerald-500 animate-pulse flex items-center gap-1.5 pointer-events-auto";
         guideIcon.innerText = "✓";
-        guideText.innerText = "ĐÃ KHÓA 4 GÓC! Đang chụp chấm...";
+        guideBoxText.innerText = "ĐÃ KHÓA 4 MỐC! ĐANG CHẤM...";
+        guideSubText.innerText = "Đang giữ yên máy và chụp tự động...";
 
         lockFrames++;
         if (lockFrames >= 2) {
@@ -535,30 +732,17 @@
       }
 
       lockFrames = 0;
-      viewfinder.className = "relative z-10 w-[86%] max-w-[340px] aspect-[1/1.414] border-2 border-red-500/70 rounded-2xl viewfinder-mask transition-all flex flex-col justify-between p-2 pointer-events-none";
-      guideBox.className = "text-center text-xs font-bold text-amber-300 bg-black/85 px-4 py-2 rounded-full mx-auto shadow-xl border border-amber-500/50 transition-all flex items-center gap-1.5 pointer-events-auto";
+      viewfinder.className = "relative w-[88%] max-w-[330px] aspect-[1/1.444] border-2 border-dashed border-emerald-400/70 rounded-2xl viewfinder-mask transition-all flex flex-col justify-between p-1";
+      guideBox.className = "text-center text-[11px] font-bold text-amber-300 bg-black/85 px-3 py-1.5 rounded-full mx-auto shadow-xl border border-amber-500/50 transition-all flex items-center gap-1.5 pointer-events-auto";
 
-      if (tl && bl && !tr && !br) {
-        guideIcon.innerText = "➔";
-        guideText.innerText = "Dịch camera sang PHẢI một chút";
-      } else if (tr && br && !tl && !bl) {
-        guideIcon.innerText = "⬅";
-        guideText.innerText = "Dịch camera sang TRÁI một chút";
-      } else if (tl && tr && !bl && !br) {
-        guideIcon.innerText = "⬇";
-        guideText.innerText = "Dịch camera XUỐNG DƯỚI";
-      } else if (bl && br && !tl && !tr) {
-        guideIcon.innerText = "⬆";
-        guideText.innerText = "Dịch camera LÊN TRÊN";
-      } else if (matchedCount === 1) {
-        guideIcon.innerText = "📐";
-        guideText.innerText = "Cầm máy SONG SONG với mặt bàn";
-      } else if (matchedCount === 0) {
-        guideIcon.innerText = "🔍";
-        guideText.innerText = "Đưa 4 góc bài thi vào 4 ô vuông ngắm";
-      } else {
+      if (matchedCount >= 2) {
         guideIcon.innerText = "⚡";
-        guideText.innerText = `Đã khớp ${matchedCount}/4. Bấm nút tròn để chụp ngay!`;
+        guideBoxText.innerText = `Đã khớp ${matchedCount}/4 mốc. Bấm 'Chụp' hoặc giữ yên!`;
+        guideSubText.innerText = "Giữ chắc tay để tự động chụp, hoặc bấm 'Chụp và chấm ngay' bên dưới.";
+      } else {
+        guideIcon.innerText = "🎯";
+        guideBoxText.innerText = "Đưa 4 góc mốc đen vào khung";
+        guideSubText.innerText = "Chưa nhận diện đủ 4 mốc đen. Đưa gần hơn, căn góc và giữ đủ 4 mốc.";
       }
     }
 
@@ -567,48 +751,90 @@
     }
 
     // =========================================================================
-    // GỬI ẢNH LÊN MÁY CHỦ CHẤM THI
+    // GỬI ẢNH LÊN MÁY CHỦ CHẤM THI (TỪ VIDEO CANVAS)
     // =========================================================================
     async function executeGradingProcess() {
       isGrading = true;
-      if (navigator.vibrate) navigator.vibrate(80);
+      if (navigator.vibrate) navigator.vibrate(60);
 
-      const guideText = document.getElementById("guideText");
+      const guideBoxText = document.getElementById("guideBoxText");
       const guideIcon = document.getElementById("guideIcon");
+      const guideSubText = document.getElementById("guideText");
       guideIcon.innerText = "⏳";
-      guideText.innerText = "Đang kiểm định & chấm bài...";
+      guideBoxText.innerText = "Đang nắn phẳng & chấm điểm...";
+      guideSubText.innerText = "Hệ thống đang đối chiếu đáp án với mã đề bài thi...";
 
       const video = document.getElementById("videoElement");
       const canvas = document.getElementById("captureCanvas");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      canvas.width = video.videoWidth || 1920;
+      canvas.height = video.videoHeight || 1080;
       canvas.getContext("2d").drawImage(video, 0, 0);
 
       canvas.toBlob(async (blob) => {
-        const fd = new FormData();
-        fd.append("file", blob, `Mobile_${Date.now()}.jpg`);
-
-        try {
-          const res = await fetch("/api/grade-single-file", { method: "POST", body: fd });
-          const data = await res.json();
-          if (data.new_submissions && data.new_submissions.length > 0) {
-            const sub = data.new_submissions[0];
-            if (sub.has_error) {
-              if (navigator.vibrate) navigator.vibrate([100, 80, 100]);
-              alert(sub.error_msg || "Ảnh chụp không đạt yêu cầu. Vui lòng giữ máy thẳng và đủ sáng.");
-            } else {
-              if (navigator.vibrate) navigator.vibrate([60, 40, 120]);
-              showResultToast(sub);
-              await refreshSessionData();
-            }
-          }
-        } catch (err) {
-          alert("Lỗi kết nối máy chủ: " + err.message);
-        } finally {
+        if (!blob) {
           isGrading = false;
-          lockFrames = 0;
+          return;
         }
+        await postGradeImageBlob(blob, `Mobile_${Date.now()}.jpg`);
       }, "image/jpeg", 0.92);
+    }
+
+    // =========================================================================
+    // CHỤP BẰNG CAMERA MÁY NATIVE (FAIL-SAFE 100% HOẠT ĐỘNG MỌI ỨNG DỤNG)
+    // =========================================================================
+    async function handleNativeCameraCapture(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      isGrading = true;
+      if (navigator.vibrate) navigator.vibrate(60);
+
+      const guideBoxText = document.getElementById("guideBoxText");
+      const guideIcon = document.getElementById("guideIcon");
+      guideIcon.innerText = "⏳";
+      guideBoxText.innerText = "Đang nắn phẳng & chấm điểm...";
+
+      await postGradeImageBlob(file, file.name || `Native_${Date.now()}.jpg`);
+      event.target.value = ""; // Reset file input
+    }
+
+    async function postGradeImageBlob(blobOrFile, filename) {
+      const fd = new FormData();
+      fd.append("file", blobOrFile, filename);
+
+      try {
+        const res = await fetch("/api/grade-single-file", { method: "POST", body: fd });
+        
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          const errDetail = errData.detail || `Lỗi máy chủ (${res.status})`;
+          playBeep(false);
+          if (navigator.vibrate) navigator.vibrate([100, 60, 100]);
+          showNotificationToast(errDetail, true);
+          return;
+        }
+
+        const data = await res.json();
+        if (data.new_submissions && data.new_submissions.length > 0) {
+          const sub = data.new_submissions[0];
+          if (sub.has_error) {
+            playBeep(false);
+            if (navigator.vibrate) navigator.vibrate([100, 60, 100]);
+            showNotificationToast(sub.error_msg || "Ảnh chụp không đạt yêu cầu. Vui lòng chụp thẳng và đủ sáng.", true);
+          } else {
+            playBeep(true);
+            if (navigator.vibrate) navigator.vibrate([60, 40, 120]);
+            showResultToast(sub);
+            await refreshSessionData();
+          }
+        }
+      } catch (err) {
+        playBeep(false);
+        showNotificationToast("Lỗi kết nối máy chủ: " + err.message, true);
+      } finally {
+        isGrading = false;
+        lockFrames = 0;
+      }
     }
 
     function showResultToast(sub) {
@@ -700,7 +926,7 @@
           renderSubmissionsList();
         }
       } catch (e) {
-        alert("Lỗi khi xóa bài: " + e.message);
+        showNotificationToast("Lỗi khi xóa bài: " + e.message, true);
       }
     }
 
@@ -746,10 +972,10 @@
         if (res.ok) {
           await refreshSessionData();
           renderExamsList();
-          alert("Đã chuyển sang đợt thi đã chọn.");
+          showNotificationToast("Đã chuyển sang đợt thi đã chọn.", false);
         }
       } catch (e) {
-        alert("Lỗi chuyển đợt thi: " + e.message);
+        showNotificationToast("Lỗi chuyển đợt thi: " + e.message, true);
       }
     }
 
@@ -764,7 +990,7 @@
       const className = document.getElementById("mobInpClass").value.trim();
 
       if (!subject || !period || !className) {
-        alert("Vui lòng điền đủ Môn học, Kỳ thi và Lớp.");
+        showNotificationToast("Vui lòng điền đủ Môn học, Kỳ thi và Lớp.", true);
         return;
       }
 
@@ -783,10 +1009,10 @@
           toggleCreateExamForm();
           await refreshSessionData();
           renderExamsList();
-          alert("Khởi tạo đợt thi mới thành công!");
+          showNotificationToast("Khởi tạo đợt thi mới thành công!", false);
         }
       } catch (e) {
-        alert("Lỗi khởi tạo đợt thi: " + e.message);
+        showNotificationToast("Lỗi khởi tạo đợt thi: " + e.message, true);
       }
     }
 
@@ -801,13 +1027,13 @@
         const res = await fetch("/api/upload-answer-key", { method: "POST", body: fd });
         const data = await res.json();
         if (data.status === "SUCCESS") {
-          alert(`✓ Nạp đáp án thành công!\nĐã nạp ${data.exam_codes.length} mã đề thi.`);
+          showNotificationToast(`✓ Đã nạp thành công ${data.exam_codes.length} mã đề!`, false);
           await refreshSessionData();
         } else {
-          alert("Lỗi nạp đáp án: " + (data.detail || "Không rõ nguyên nhân"));
+          showNotificationToast("Lỗi nạp đáp án: " + (data.detail || "Không rõ"), true);
         }
       } catch (err) {
-        alert("Lỗi kết nối khi nạp đáp án: " + err.message);
+        showNotificationToast("Lỗi kết nối khi nạp đáp án: " + err.message, true);
       }
     }
 
@@ -817,7 +1043,7 @@
     async function exportExcelMobile() {
       const subs = sessionData.submissions || [];
       if (subs.length === 0) {
-        alert("Chưa có bài thi nào được chấm để xuất bảng điểm.");
+        showNotificationToast("Chưa có bài thi nào được chấm để xuất bảng điểm.", true);
         return;
       }
 
@@ -835,14 +1061,14 @@
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
       } catch (err) {
-        alert("Lỗi xuất Excel: " + err.message);
+        showNotificationToast("Lỗi xuất Excel: " + err.message, true);
       }
     }
 
     async function exportPdfMobile() {
       const subs = sessionData.submissions || [];
       if (subs.length === 0) {
-        alert("Chưa có bài thi nào được chấm để xuất PDF.");
+        showNotificationToast("Chưa có bài thi nào được chấm để xuất PDF.", true);
         return;
       }
 
@@ -860,7 +1086,7 @@
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
       } catch (err) {
-        alert("Lỗi xuất PDF: " + err.message);
+        showNotificationToast("Lỗi xuất PDF: " + err.message, true);
       }
     }
   </script>
