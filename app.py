@@ -722,6 +722,12 @@ async def get_graded_image(sub_id: str):
     )
 
 
+@app.get("/api/image/{sub_id}")
+async def get_image_alias(sub_id: str):
+    """Bí danh phục vụ ảnh bài làm cho các client gọi /api/image/{sub_id}"""
+    return await get_graded_image(sub_id)
+
+
 # ==============================================================================
 # 6. ROUTE IMPORT / EXPORT DỮ LIỆU (KHỬ HOÀN TOÀN DẤU TIẾNG VIỆT CHO HEADER)
 # ==============================================================================
@@ -922,6 +928,12 @@ async def export_graded_pdf():
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Lỗi xuất PDF: {str(e)}")
+
+
+@app.get("/api/export-pdf")
+async def export_pdf_alias():
+    """Bí danh xuất tập phiếu đã chấm thành PDF"""
+    return await export_graded_pdf()
 
 
 # ==============================================================================
