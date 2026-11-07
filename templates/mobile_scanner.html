@@ -270,6 +270,10 @@
             <span>📄 Nạp File Đáp Án (Excel)</span>
             <input type="file" id="mobileKeyPicker" accept=".xlsx,.xls" class="hidden" onchange="uploadAnswerKeyMobile(event)">
           </label>
+          <!-- Dán đáp án nhanh -->
+          <button onclick="openSmartPasteMobile()" class="w-full py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow">
+            <span>📋 Dán Đáp Án Nhanh (Smart Paste)</span>
+          </button>
         </div>
       </div>
 
@@ -321,6 +325,47 @@
 
   <!-- INPUT FILE ẨN ĐỂ MỞ CAMERA GỐC ĐIỆN THOẠI (DỰ PHÒNG KHI CẦN) -->
   <input type="file" id="nativeCameraInput" accept="image/*" capture="environment" class="hidden" onchange="handleNativeCameraCapture(event)">
+
+  <!-- MODAL DÁN ĐÁP ÁN NHANH TRÊN MOBILE -->
+  <div id="mobileSmartPasteModal" class="fixed inset-0 z-50 bg-black/90 flex flex-col justify-center hidden p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col max-h-[85vh]">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-2.5 mb-3">
+        <div>
+          <h3 class="text-xs font-bold text-violet-400 uppercase flex items-center gap-1">
+            <span>📋 Dán Đáp Án Nhanh</span>
+          </h3>
+          <p class="text-[10px] text-slate-400">Dán từ Zalo, SMS, Word (P1, P2, P3)</p>
+        </div>
+        <button onclick="closeSmartPasteMobile()" class="px-2 py-1 text-slate-400 text-xs font-bold">✕</button>
+      </div>
+      <div class="space-y-2.5 overflow-y-auto flex-1">
+        <div>
+          <label class="block text-[10px] text-slate-400 mb-0.5">Mã đề mặc định:</label>
+          <input type="text" id="mobDefaultMade" value="0001" maxlength="4" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-white">
+        </div>
+        <div>
+          <label class="block text-[10px] text-slate-400 mb-0.5">Văn bản đáp án:</label>
+          <textarea id="mobSmartPasteText" rows="9" placeholder="Dán nội dung từ Zalo/Word...
+VD:
+Mã đề: 0504
+PHẦN I:
+1.A 2.B 3.C
+PHẦN II:
+Câu 1: a) Đ, b) S, c) Đ, d) S
+PHẦN III:
+Câu 1: -14
+Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs font-mono text-slate-200 outline-none focus:border-violet-500 shadow-inner"></textarea>
+        </div>
+        <div id="mobSmartPasteFeedback" class="text-xs p-2 rounded hidden"></div>
+      </div>
+      <div class="mt-3 pt-2.5 border-t border-slate-800 flex justify-end gap-2">
+        <button onclick="closeSmartPasteMobile()" class="px-3 py-1.5 bg-slate-800 text-slate-300 rounded-lg text-xs font-semibold">Đóng</button>
+        <button onclick="submitSmartPasteMobile()" id="btnMobSubmitSmartPaste" class="px-3.5 py-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-bold shadow">
+          Nạp Đáp Án
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- ========================================================================= -->
   <!-- MODAL XEM CHI TIẾT ẢNH BÀI CHẤM BÚT ĐỎ (CÓ SPINNER VÀ TỰ SỬA ROUTE) -->
@@ -1168,6 +1213,61 @@
         window.URL.revokeObjectURL(url);
       } catch (err) {
         showNotificationToast("Lỗi xuất Excel: " + err.message, true);
+      }
+    }
+
+    function openSmartPasteMobile() {
+      document.getElementById("mobSmartPasteText").value = "";
+      const fb = document.getElementById("mobSmartPasteFeedback");
+      fb.className = "hidden";
+      fb.innerText = "";
+      document.getElementById("mobileSmartPasteModal").classList.remove("hidden");
+    }
+
+    function closeSmartPasteMobile() {
+      document.getElementById("mobileSmartPasteModal").classList.add("hidden");
+    }
+
+    async function submitSmartPasteMobile() {
+      const text = document.getElementById("mobSmartPasteText").value.trim();
+      const defaultMade = document.getElementById("mobDefaultMade").value.trim() || "0001";
+      const fb = document.getElementById("mobSmartPasteFeedback");
+      const btn = document.getElementById("btnMobSubmitSmartPaste");
+
+      if (!text) {
+        fb.className = "text-xs p-2 rounded bg-rose-950 text-rose-300 border border-rose-800 block";
+        fb.innerText = "Vui lòng nhập hoặc dán nội dung đáp án.";
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = "Đang nạp...";
+      fb.className = "text-xs p-2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 block";
+      fb.innerText = "Đang nhận diện cú pháp...";
+
+      try {
+        const res = await fetch("/api/smart-paste-answer-key", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: text, default_made: defaultMade })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Lỗi xử lý đáp án");
+
+        fb.className = "text-xs p-2 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 block";
+        fb.innerHTML = `✓ Đã nạp mã đề: <b>${data.codes_loaded.join(", ")}</b>! Đã chấm lại ${data.re_graded_count} bài.`;
+        showNotificationToast(`Đã nạp đáp án mã đề ${data.codes_loaded.join(", ")}!`, false);
+
+        setTimeout(() => {
+          closeSmartPasteMobile();
+          syncSessionData();
+        }, 1200);
+      } catch (err) {
+        fb.className = "text-xs p-2 rounded bg-rose-950 text-rose-300 border border-rose-800 block";
+        fb.innerText = "Lỗi: " + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "Nạp Đáp Án";
       }
     }
 

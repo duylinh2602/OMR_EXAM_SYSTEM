@@ -9,6 +9,7 @@ Chuẩn hóa Giai đoạn 1:
 - Chuẩn hóa dữ liệu Phần III: Hỗ trợ linh hoạt cả Object OMR lẫn giá trị số Float từ giao diện sửa tay.
 - Tương thích 100% với VisualStamper và cơ chế giải quyết đường dẫn Runtime.
 """
+import base64
 import json
 import math
 import os
@@ -19,6 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
+from align_sheet_v2 import normalize_illumination
 from visual_stamper import VisualStamper
 
 CANONICAL_WIDTH = 1769
@@ -264,11 +266,34 @@ class FullGradingPipeline:
         mask = (xx * xx + yy * yy) <= (r_core * r_core)
         return float(np.mean(patch[mask]))
 
-    def _read_header_ink(self, ink_map: np.ndarray) -> Tuple[str, str, str, List[Dict[str, str]]]:
-        """Đọc Số báo danh và Mã đề với nguyên tắc không tự ý suy đoán."""
+    @staticmethod
+    def _extract_crop_b64(image_bgr: np.ndarray, cx: float, cy: float, box_size: int = 110) -> str:
+        """Trích xuất ảnh phóng to (Crop-zoom) vùng ô tô để giáo viên kiểm tra trực quan tức thì."""
+        if image_bgr is None or image_bgr.size == 0:
+            return ""
+        h, w = image_bgr.shape[:2]
+        half = box_size // 2
+        x1 = max(0, int(round(cx)) - half)
+        y1 = max(0, int(round(cy)) - half)
+        x2 = min(w, x1 + box_size)
+        y2 = min(h, y1 + box_size)
+        patch = image_bgr[y1:y2, x1:x2]
+        if patch.size == 0:
+            return ""
+        patch_copy = patch.copy()
+        cv2.circle(patch_copy, (int(round(cx)) - x1, int(round(cy)) - y1), 14, (0, 0, 230), 2)
+        success, buf = cv2.imencode(".jpg", patch_copy, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        if success:
+            return "data:image/jpeg;base64," + base64.b64encode(buf).decode("ascii")
+        return ""
+
+    def _read_header_ink(self, ink_map: np.ndarray, image_bgr: Optional[np.ndarray] = None) -> Tuple[str, str, str, List[Dict[str, Any]]]:
+        """Đọc Số báo danh và Mã đề với nguyên tắc không tự ý suy đoán và khử sạch nhiễu ô trắng."""
         anomalies = []
-        FILL_THRESH = 16.0
-        DOUBLE_THRESH = 15.0
+        FILL_HIGH = 24.0
+        FILL_MIN = 20.0
+        DOUBLE_THRESH = 22.0
+        MARGIN = 6.0
 
         def decode_grid(cols, grid_name="SBD"):
             res = []
@@ -278,15 +303,18 @@ class FullGradingPipeline:
                 top_d, top_s = ranked[0]
                 sec_d, sec_s = ranked[1]
 
-                if top_s >= FILL_THRESH and sec_s >= DOUBLE_THRESH and (top_s - sec_s) < 8.0:
+                # Kiểm tra tô đúp thực sự: cả 2 ô đều phải có vết chì thật (>= 22.0) và chênh lệch nhỏ (< 6.0)
+                if top_s >= FILL_HIGH and sec_s >= DOUBLE_THRESH and (top_s - sec_s) < 6.0:
                     res.append(f"[{top_d}{sec_d}]")
+                    crop = self._extract_crop_b64(image_bgr, col["digits"][str(top_d)][0], col["digits"][str(top_d)][1]) if image_bgr is not None else ""
                     anomalies.append({
                         "type": f"{grid_name}_DOUBLE_FILL",
-                        "msg": f"{grid_name} Cột {col_idx} tô đúp ({top_d} và {sec_d})"
+                        "msg": f"{grid_name} Cột {col_idx} tô đúp ({top_d} và {sec_d})",
+                        "crop_b64": crop
                     })
-                elif top_s >= FILL_THRESH and (top_s - sec_s) >= 7.0:
+                elif top_s >= FILL_MIN and (top_s - sec_s) >= MARGIN:
                     res.append(str(top_d))
-                elif top_s >= 25.0:
+                elif top_s >= 28.0 and (top_s - sec_s) >= 7.0:
                     res.append(str(top_d))
                 else:
                     res.append("?")
@@ -316,14 +344,14 @@ class FullGradingPipeline:
         return sbd, raw_made, final_made, anomalies
 
     def process_sheet(self, image_bgr: np.ndarray, file_name: str, forced_exam_code: Optional[str] = None) -> Dict[str, Any]:
-        gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
-
-        # 1. TẠO INK MAP TOÀN CỤC (High-performance Gaussian background subtraction)
+        # 1. CÂN BẰNG SÁNG PHẲNG (FLAT-FIELD CORRECTION) & TẠO INK MAP TOÀN CỤC
+        norm_bgr = normalize_illumination(image_bgr)
+        gray = cv2.cvtColor(norm_bgr, cv2.COLOR_BGR2GRAY)
         bg = cv2.GaussianBlur(gray, (0, 0), sigmaX=22.0, sigmaY=22.0, borderType=cv2.BORDER_REFLECT)
         ink_map = bg.astype(np.float32) - gray.astype(np.float32)
 
-        # 2. ĐỌC HEADER
-        sbd, raw_made, detected_made, h_anom = self._read_header_ink(ink_map)
+        # 2. ĐỌC HEADER (TỰ ĐỘNG KÈM CROP B64 NẾU CÓ BẤT THƯỜNG)
+        sbd, raw_made, detected_made, h_anom = self._read_header_ink(ink_map, image_bgr)
         
         # Nếu giáo viên cưỡng chế mã đề (sửa tay), sử dụng forced_exam_code
         if forced_exam_code and str(forced_exam_code).strip():
@@ -349,8 +377,8 @@ class FullGradingPipeline:
         # 4. QUÉT PHẦN I (TRẮC NGHIỆM 4 LỰA CHỌN)
         p1_res = {}
         p1_anom = []
-        FILL_P1_THRESH = 16.0
-        MARGIN_P1 = 9.0
+        FILL_P1_THRESH = 18.0
+        MARGIN_P1 = 7.0
 
         for q in self.p1_coords:
             q_num = int(q["question"])
@@ -364,17 +392,21 @@ class FullGradingPipeline:
             if top_val < FILL_P1_THRESH:
                 p1_res[q_num] = ""
             elif sec_val >= FILL_P1_THRESH and (top_val - sec_val) < MARGIN_P1:
-                # SỬA LỖI 1: Tô đúp gán MULTIPLE -> Tuyệt đối không cho điểm câu này
                 p1_res[q_num] = "MULTIPLE"
-                p1_anom.append({"type": "P1_DOUBLE_FILL", "msg": f"Phần I Câu {q_num} tô đúp ({top_opt} và {sec_opt})"})
+                crop = self._extract_crop_b64(image_bgr, q["choices"][top_opt][0], q["choices"][top_opt][1])
+                p1_anom.append({
+                    "type": "P1_DOUBLE_FILL",
+                    "msg": f"Phần I Câu {q_num} tô đúp ({top_opt} và {sec_opt})",
+                    "crop_b64": crop
+                })
             else:
                 p1_res[q_num] = top_opt
 
         # 5. QUÉT PHẦN II (ĐÚNG / SAI BẬC THANG)
         p2_res = {}
         p2_anom = []
-        FILL_P2_THRESH = 16.0
-        MARGIN_P2 = 9.0
+        FILL_P2_THRESH = 18.0
+        MARGIN_P2 = 7.0
 
         for q in self.p2_coords:
             q_num = int(q["question"])
@@ -389,23 +421,35 @@ class FullGradingPipeline:
 
                 if st < FILL_P2_THRESH and sf < FILL_P2_THRESH:
                     row_dict[rk] = ""
-                elif st >= FILL_P2_THRESH and sf >= FILL_P2_THRESH:
-                    # SỬA LỖI 1: Cả Đ và S cùng có nét chì -> Gán ĐS -> Tính 0 điểm ý này
+                elif st >= FILL_P2_THRESH and sf >= FILL_P2_THRESH and abs(st - sf) < MARGIN_P2:
                     row_dict[rk] = "ĐS"
-                    p2_anom.append({"type": "P2_DOUBLE_FILL", "msg": f"Phần II Câu {q_num}{rk} tô cả Đúng và Sai"})
+                    crop = self._extract_crop_b64(image_bgr, tx, ty)
+                    p2_anom.append({
+                        "type": "P2_DOUBLE_FILL",
+                        "msg": f"Phần II Câu {q_num}{rk} tô cả Đúng và Sai",
+                        "crop_b64": crop
+                    })
                 elif st >= FILL_P2_THRESH and (st - sf) >= MARGIN_P2:
                     row_dict[rk] = "Đ"
                 elif sf >= FILL_P2_THRESH and (sf - st) >= MARGIN_P2:
                     row_dict[rk] = "S"
                 elif max(st, sf) >= FILL_P2_THRESH:
                     row_dict[rk] = "Đ" if st > sf else "S"
-                    p2_anom.append({"type": "P2_UNCERTAIN", "msg": f"Phần II Câu {q_num}{rk} tô mờ/chưa rõ giữa Đ và S"})
+                    crop = self._extract_crop_b64(image_bgr, tx if st > sf else fx, ty if st > sf else fy)
+                    p2_anom.append({
+                        "type": "P2_UNCERTAIN",
+                        "msg": f"Phần II Câu {q_num}{rk} tô mờ/chưa rõ giữa Đ và S",
+                        "crop_b64": crop
+                    })
                 else:
                     row_dict[rk] = ""
             p2_res[q_num] = row_dict
 
         # 6. QUÉT PHẦN III (TRẢ LỜI NGẮN)
         p3_res, p3_anom = self.p3_reader.read_filtered(gray, ink_map, list(active_p3))
+        for a in p3_anom:
+            if "crop_b64" not in a:
+                a["crop_b64"] = ""
 
         all_anom = h_anom + p1_anom + p2_anom + p3_anom
         score_res = self._grade(exam_code, p1_res, p2_res, p3_res)

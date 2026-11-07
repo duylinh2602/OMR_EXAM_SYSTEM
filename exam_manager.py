@@ -337,3 +337,148 @@ class ExamManager:
             },
             "answer_keys": answer_keys
         }
+
+    @classmethod
+    def smart_parse_text_keys(cls, text: str, default_made: str = "0001") -> Dict[str, Any]:
+        """
+        Bộ bóc tách đáp án thông minh từ văn bản thô (Word, Zalo, SMS, Excel copy-paste).
+        Hỗ trợ dán đồng thời nhiều mã đề hoặc một mã đề đơn lẻ.
+        """
+        import re
+        raw = str(text or "").replace("\r", "\n")
+        made_blocks = re.split(r'(?i)(?:^|\n)\s*(?:MÃ ĐỀ|MÃ DE|MA DE|ĐỀ|DE)\s*[:#\s]*(\d+)', raw)
+        
+        answer_keys = {}
+        if len(made_blocks) > 1 and made_blocks[1].isdigit():
+            i = 1
+            while i < len(made_blocks):
+                code = made_blocks[i].strip().zfill(4)
+                content = made_blocks[i+1] if i+1 < len(made_blocks) else ""
+                answer_keys[code] = cls._parse_single_key_block(content)
+                i += 2
+        else:
+            lines = [l.strip() for l in raw.strip().split("\n") if l.strip()]
+            first_line = lines[0] if lines else ""
+            code = default_made.zfill(4)
+            body = raw
+            if re.match(r'^\d{3,4}$', first_line):
+                code = first_line.zfill(4)
+                body = "\n".join(lines[1:])
+            answer_keys[code] = cls._parse_single_key_block(body)
+            
+        return {
+            "exam_name": "Nhập đáp án thông minh (Smart Paste)",
+            "config": {
+                "pts_p1": 0.25,
+                "pts_p2_rule": {0: 0.0, 1: 0.1, 2: 0.25, 3: 0.5, 4: 1.0},
+                "pts_p3": 0.25
+            },
+            "answer_keys": answer_keys
+        }
+
+    @classmethod
+    @classmethod
+    def _parse_single_key_block(cls, text: str) -> Dict[str, Any]:
+        import re
+        p1, p2, p3 = {}, {}, {}
+        norm = text.upper().replace("Ð", "Đ")
+        
+        # Sắp xếp các cụm từ dài trước (III rồi II rồi I) để tránh khớp tiền tố nhầm lẫn
+        sec_regex = r'(?i)(?:^|\n)\s*(PHẦN\s*III\b|PHAN\s*3\b|TLN\b|PHẦN\s*II\b|PHAN\s*2\b|DS\b|ĐS\b|PHẦN\s*I\b|PHAN\s*1\b|TN\b)\s*[:\-\.]?'
+        matches = list(re.finditer(sec_regex, norm))
+        
+        p1_text, p2_text, p3_text = "", "", ""
+        if matches:
+            for idx, m in enumerate(matches):
+                label = m.group(1).upper()
+                start = m.end()
+                end = matches[idx+1].start() if idx+1 < len(matches) else len(norm)
+                chunk = norm[start:end]
+                if any(k in label for k in ["III", "3", "TLN"]):
+                    p3_text += "\n" + chunk
+                elif any(k in label for k in ["II", "2", "DS", "ĐS"]):
+                    p2_text += "\n" + chunk
+                elif any(k in label for k in ["I", "1", "TN"]):
+                    p1_text += "\n" + chunk
+        else:
+            lines_text = [l.strip() for l in norm.split("\n") if l.strip()]
+            for line in lines_text:
+                if re.search(r'[ĐS]', line) and not re.search(r'[A-D]', line):
+                    p2_text += "\n" + line
+                elif re.search(r'\d+(?:[.,]\d+)?', line) and not re.search(r'[A-DĐS]', line):
+                    p3_text += "\n" + line
+                else:
+                    p1_text += "\n" + line
+
+        # 1. Phần I
+        p1_items = re.findall(r'(?:^|[\s;,]|câu\s*)(\d{1,2})[\.:\)\-\s]*([ABCD])\b', p1_text, re.IGNORECASE)
+        if p1_items:
+            for q_str, ans in p1_items:
+                q_num = int(q_str)
+                if 1 <= q_num <= cls.MAX_P1:
+                    p1[q_num] = ans.upper()
+        else:
+            tokens = re.findall(r'\b[ABCD]+\b', p1_text)
+            flat_chars = "".join(tokens)
+            for idx, char in enumerate(flat_chars[:cls.MAX_P1], start=1):
+                p1[idx] = char
+
+        # 2. Phần II: Hỗ trợ linh hoạt cả khối câu 'Câu 1: a) Đ, b) S...' và dạng lặp '1a: Đ, 1b: S...'
+        q_blocks = re.split(r'(?i)(?:^|\n)\s*(?:câu\s*)?(\d{1,2})\s*[:\.\)]', p2_text)
+        if len(q_blocks) > 1:
+            for i in range(1, len(q_blocks), 2):
+                try:
+                    q_num = int(q_blocks[i])
+                    if 1 <= q_num <= cls.MAX_P2:
+                        block = q_blocks[i+1]
+                        subs = re.findall(r'([ABCDa-d])[\.:\)\-\s]*([ĐS])', block)
+                        if subs:
+                            p2[q_num] = {k.lower(): v for k, v in subs}
+                except (ValueError, IndexError):
+                    pass
+
+        if not p2:
+            p2_sub_items = re.findall(r'(?:^|[\s;,]|câu\s*)(\d{1,2})\s*([ABCDa-d])[\.:\)\-\s]*([ĐS])\b', p2_text, re.IGNORECASE)
+            if p2_sub_items:
+                for q_str, sub_key, val in p2_sub_items:
+                    q_num = int(q_str)
+                    if 1 <= q_num <= cls.MAX_P2:
+                        if q_num not in p2:
+                            p2[q_num] = {}
+                        p2[q_num][sub_key.lower()] = val.upper()
+
+        if not p2:
+            for line in p2_text.split('\n'):
+                line = line.strip()
+                m = re.match(r'^(?:câu\s*)?(\d{1,2})[\.:\)\-\s]*([ĐS\s]{4,})', line, re.IGNORECASE)
+                if m:
+                    q_num = int(m.group(1))
+                    chars = [c for c in m.group(2) if c in "ĐS"]
+                    if len(chars) == 4 and 1 <= q_num <= cls.MAX_P2:
+                        p2[q_num] = {"a": chars[0], "b": chars[1], "c": chars[2], "d": chars[3]}
+            if not p2:
+                all_ds = [c for c in p2_text if c in "ĐS"]
+                num_rows = min(len(all_ds) // 4, cls.MAX_P2)
+                for r_idx in range(num_rows):
+                    chunk = all_ds[r_idx*4 : (r_idx+1)*4]
+                    p2[r_idx + 1] = {"a": chunk[0], "b": chunk[1], "c": chunk[2], "d": chunk[3]}
+
+        # 3. Phần III
+        p3_items = re.findall(r'(?:^|[\s;,]|câu\s*)(\d{1,2})[:\)\.\s]+(-?\d+(?:[.,]\d+)?)\b', p3_text, re.IGNORECASE)
+        if p3_items:
+            for q_str, val_str in p3_items:
+                q_num = int(q_str)
+                if 1 <= q_num <= cls.MAX_P3:
+                    try:
+                        p3[q_num] = float(val_str.replace(",", "."))
+                    except ValueError:
+                        pass
+        else:
+            num_tokens = re.findall(r'-?\d+(?:[.,]\d+)?', p3_text)
+            for idx, val_str in enumerate(num_tokens[:cls.MAX_P3], start=1):
+                try:
+                    p3[idx] = float(val_str.replace(",", "."))
+                except ValueError:
+                    pass
+
+        return {"part1": p1, "part2": p2, "part3": p3}

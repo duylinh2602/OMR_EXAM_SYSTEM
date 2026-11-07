@@ -96,6 +96,11 @@ class UpdateSubmissionRequest(BaseModel):
     part3: Dict[str, Optional[float]]
 
 
+class SmartPasteRequest(BaseModel):
+    text: str
+    default_made: Optional[str] = "0001"
+
+
 # ==============================================================================
 # 2. DATABASE & SESSION MANAGEMENT (SINGLE SOURCE OF TRUTH)
 # ==============================================================================
@@ -819,6 +824,94 @@ async def upload_answer_key(file: UploadFile = File(...)):
     except Exception as err:
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"Lỗi file đáp án: {err}")
+
+
+@app.post("/api/smart-paste-answer-key")
+async def smart_paste_answer_key(payload: SmartPasteRequest):
+    global pipeline
+    if not payload.text or not payload.text.strip():
+        raise HTTPException(status_code=400, detail="Vui lòng nhập hoặc dán nội dung đáp án.")
+
+    try:
+        parsed_result = ExamManager.smart_parse_text_keys(payload.text, default_made=payload.default_made or "0001")
+        parsed_keys = parsed_result.get("answer_keys", {})
+        if not parsed_keys:
+            raise HTTPException(status_code=400, detail="Không nhận diện được câu hỏi hoặc đáp án nào. Hãy kiểm tra định dạng dán (VD: 1.A 2.B hoặc 1A 2B).")
+
+        exam = get_current_exam()
+        if not exam.get("exam_data"):
+            exam["exam_data"] = {
+                "exam_name": f"{exam['exam_info'].get('subject', 'Đề thi')} - {exam['exam_info'].get('period', 'Kiểm tra')}",
+                "subject": exam["exam_info"].get("subject", "Sinh học"),
+                "period": exam["exam_info"].get("period", "Giữa kỳ I"),
+                "config": parsed_result.get("config", {"part1_max": 18, "part2_max": 4, "part3_max": 6}),
+                "answer_keys": {},
+                "scoring_rules": {
+                    "part1": {"points_per_question": 0.25},
+                    "part2": {
+                        "type": "graduated_moet",
+                        "table": {"1": 0.1, "2": 0.25, "3": 0.5, "4": 1.0}
+                    },
+                    "part3": {"points_per_question": 0.25}
+                }
+            }
+        elif "config" not in exam["exam_data"]:
+            exam["exam_data"]["config"] = parsed_result.get("config", {"part1_max": 18, "part2_max": 4, "part3_max": 6})
+
+        # Cập nhật các mã đề mới parsed vào answer_keys
+        exam["exam_data"]["answer_keys"].update(parsed_keys)
+        exam["exam_info"]["is_configured"] = True
+
+        pipeline = FullGradingPipeline(exam_data=exam["exam_data"])
+
+        # Tái chấm các bài thi có trong danh sách
+        re_graded_count = 0
+        for sub_id, sub in exam.get("submissions", {}).items():
+            sub_code = sub.get("exam_code", "")
+            if sub_code in exam["exam_data"]["answer_keys"]:
+                aligned_p = None
+                for p in [GRADED_DIR / f"{sub_id}_aligned.png", UPLOAD_DIR / f"{sub_id}_aligned.png", GRADED_DIR / f"{sub_id}_aligned.jpg"]:
+                    if p.exists():
+                        aligned_p = p
+                        break
+
+                if aligned_p and aligned_p.exists():
+                    img = cv2.imread(str(aligned_p))
+                    if img is not None:
+                        updated = pipeline.process_sheet(img, sub.get("file_name", ""), forced_exam_code=sub_code)
+                        updated["submission_id"] = sub_id
+                        updated["original_filename"] = sub.get("file_name", "")
+                        
+                        graded_path = GRADED_DIR / f"{sub_id}_graded.jpg"
+                        cv2.imwrite(str(graded_path), updated["graded_image_bgr"], [cv2.IMWRITE_JPEG_QUALITY, 90])
+                        
+                        preview_webp = GRADED_DIR / f"{sub_id}_preview.webp"
+                        cv2.imwrite(str(preview_webp), updated["graded_image_bgr"], [cv2.IMWRITE_WEBP_QUALITY, 80])
+                        
+                        del updated["graded_image_bgr"]
+                        exam["submissions"][sub_id] = updated
+                        re_graded_count += 1
+
+        save_to_disk()
+        return {
+            "status": "SUCCESS",
+            "codes_loaded": list(parsed_keys.keys()),
+            "total_codes": list(exam["exam_data"]["answer_keys"].keys()),
+            "re_graded_count": re_graded_count,
+            "details": {
+                c: {
+                    "part1": len(k.get("part1", {})),
+                    "part2": len(k.get("part2", {})),
+                    "part3": len(k.get("part3", {}))
+                } for c, k in parsed_keys.items()
+            },
+            "exam_info": exam["exam_info"]
+        }
+    except HTTPException:
+        raise
+    except Exception as err:
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=f"Lỗi xử lý đáp án dán: {err}")
 
 
 @app.get("/api/export-excel")
