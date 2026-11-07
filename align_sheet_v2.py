@@ -145,10 +145,10 @@ def find_adaptive_4_corners(cands: List[Tuple[float, ...]], w: int, h: int) -> O
             continue
 
         ratio = avg_h / avg_w
-        # Tỷ lệ lý tưởng giữa chiều cao và chiều rộng của 4 mốc OMR là ~1.444
-        if not (1.18 <= ratio <= 1.72):
+        # Tỷ lệ lý tưởng giữa chiều cao và chiều rộng của 4 mốc OMR là ~1.444 (cho phép góc nghiêng điện thoại 1.10 - 1.80)
+        if not (1.10 <= ratio <= 1.80):
             continue
-        if abs(w_top - w_bot) / avg_w > 0.32 or abs(h_l - h_r) / avg_h > 0.32:
+        if abs(w_top - w_bot) / avg_w > 0.38 or abs(h_l - h_r) / avg_h > 0.38:
             continue
 
         area = avg_w * avg_h

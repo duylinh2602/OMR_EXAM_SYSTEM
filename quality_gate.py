@@ -17,8 +17,8 @@ class ImageQualityAssessment:
     # Độ sáng trung bình tối thiểu và tối đa [40, 248]
     MIN_MEAN_BRIGHTNESS: float = 40.0
     MAX_MEAN_BRIGHTNESS: float = 248.0
-    # Tỷ lệ pixel quá tối (underexposed) hoặc quá sáng (burned out) tối đa
-    MAX_EXTREME_PIXELS_RATIO: float = 0.40
+    # Tỷ lệ pixel quá tối (underexposed) hoặc quá sáng (burned out) tối đa (cho phép bàn tối màu 65%)
+    MAX_EXTREME_PIXELS_RATIO: float = 0.65
 
     @classmethod
     def evaluate(cls, image_bgr: np.ndarray) -> Tuple[bool, Dict[str, Any]]:

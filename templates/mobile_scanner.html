@@ -24,11 +24,11 @@
     }
     .viewfinder-mask { box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.70); }
     
-    /* Khung ngắm góc quang học kiểu bracket mở (rộng 54px, tâm trong suốt không che mốc đen) */
+    /* Khung ngắm góc quang học kiểu bracket mở (rộng 58px, tâm trong suốt không che mốc đen) */
     .target-corner {
       position: absolute;
-      width: 54px;
-      height: 54px;
+      width: 58px;
+      height: 58px;
       transition: all 0.12s ease-out;
       display: flex;
       align-items: center;
@@ -36,10 +36,10 @@
       pointer-events: none;
       z-index: 20;
     }
-    .corner-tl { top: -2px; left: -2px; border-top: 4px solid #10b981; border-left: 4px solid #10b981; border-top-left-radius: 14px; }
-    .corner-tr { top: -2px; right: -2px; border-top: 4px solid #10b981; border-right: 4px solid #10b981; border-top-right-radius: 14px; }
-    .corner-bl { bottom: -2px; left: -2px; border-bottom: 4px solid #10b981; border-left: 4px solid #10b981; border-bottom-left-radius: 14px; }
-    .corner-br { bottom: -2px; right: -2px; border-bottom: 4px solid #10b981; border-right: 4px solid #10b981; border-bottom-right-radius: 14px; }
+    .corner-tl { top: -2px; left: -2px; border-top: 4px solid #10b981; border-left: 4px solid #10b981; border-top-left-radius: 16px; }
+    .corner-tr { top: -2px; right: -2px; border-top: 4px solid #10b981; border-right: 4px solid #10b981; border-top-right-radius: 16px; }
+    .corner-bl { bottom: -2px; left: -2px; border-bottom: 4px solid #10b981; border-left: 4px solid #10b981; border-bottom-left-radius: 16px; }
+    .corner-br { bottom: -2px; right: -2px; border-bottom: 4px solid #10b981; border-right: 4px solid #10b981; border-bottom-right-radius: 16px; }
 
     .target-corner.unmatched {
       border-color: rgba(52, 211, 153, 0.45);
@@ -699,10 +699,14 @@
         const el = document.getElementById(reticle.id);
         const rect = el.getBoundingClientRect();
 
-        const sampleW = Math.round((rect.width / scale) * 1.5);
-        const sampleH = Math.round((rect.height / scale) * 1.5);
+        const sampleW = Math.round((rect.width / scale) * 1.8);
+        const sampleH = Math.round((rect.height / scale) * 1.8);
         const vidX = Math.round((rect.left + rect.width / 2 - offsetX) / scale);
-        const vidY = Math.round((rect.top + rect.height / 2 - offsetY) / scale);
+        
+        // Hơi nâng nhẹ tâm lấy mẫu cho 2 mốc dưới lên 6px để tâm ngắm nằm chính xác trên mốc M4,
+        // tránh trường hợp mốc đen nằm sát viền giấy bị lọt ra ngoài hoặc chạm nền bàn đen
+        const offsetYFactor = (reticle.id === "reticle-bl" || reticle.id === "reticle-br") ? -6 : 0;
+        const vidY = Math.round((rect.top + rect.height / 2 + offsetYFactor - offsetY) / scale);
 
         const sx = Math.max(0, Math.min(vw - sampleW, vidX - sampleW / 2));
         const sy = Math.max(0, Math.min(vh - sampleH, vidY - sampleH / 2));
@@ -727,12 +731,12 @@
 
         const darkRatio = darkPixels / (36 * 36);
 
-        // ĐIỀU KIỆN MỐC ĐEN CHÍNH XÁC:
-        // 1. maxLum >= 115: BẮT BUỘC có giấy trắng! Tuyệt đối không nhận diện trên màn hình đen hoặc bóng tối!
-        // 2. contrast >= 25.0: Đủ độ tương phản giữa mốc đen và giấy trắng.
-        // 3. minLum < maxLum * 0.78: Mốc đen tối hơn nền giấy ít nhất 22%.
-        // 4. darkRatio từ 2.5% đến 45% diện tích vùng ngắm.
-        const isMatched = (maxLum >= 115 && contrast >= 25.0 && minLum < maxLum * 0.78 && darkRatio >= 0.025 && darkRatio <= 0.45);
+        // ĐIỀU KIỆN MỐC ĐEN CHÍNH XÁC & BỀN VỮNG:
+        // 1. maxLum >= 105: BẮT BUỘC có bề mặt giấy trắng sáng (chống bắt nhầm màn hình đen / bóng tối)
+        // 2. contrast >= 22.0: Đủ độ tương phản giữa mốc đen và nền giấy trắng
+        // 3. minLum < maxLum * 0.82: Mốc đen tối rõ rệt so với nền giấy
+        // 4. darkRatio từ 2% đến 65%: Khớp mốc đen hoàn hảo kể cả khi mép bàn đen hoặc chữ ký lọt một phần vào vùng ngắm
+        const isMatched = (maxLum >= 105 && contrast >= 22.0 && minLum < maxLum * 0.82 && darkRatio >= 0.02 && darkRatio <= 0.65);
         reticle.matched = isMatched;
 
         if (isMatched) {
@@ -873,10 +877,13 @@
         const data = await res.json();
         if (data.new_submissions && data.new_submissions.length > 0) {
           const sub = data.new_submissions[0];
+          latestSubId = sub.submission_id;
           if (sub.has_error) {
             playBeep(false);
             if (navigator.vibrate) navigator.vibrate([100, 60, 100]);
             showNotificationToast(sub.error_msg || "Ảnh chụp không đạt chuẩn. Vui lòng chụp thẳng và đủ sáng.", true);
+            await refreshSessionData();
+            renderSubmissionsList();
           } else {
             playBeep(true);
             if (navigator.vibrate) navigator.vibrate([60, 40, 120]);
