@@ -1,0 +1,864 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hệ Thống Chấm Thi Trắc Nghiệm Chuẩn Bộ GD&ĐT</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 h-screen flex flex-col font-sans overflow-hidden">
+
+  <!-- MODAL 1: TẠO ĐỢT KIỂM TRA MỚI -->
+  <div id="createExamModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 m-4">
+      <div class="flex items-center gap-3 border-b pb-3 mb-4">
+        <div class="p-2.5 bg-indigo-950 text-amber-400 font-black rounded-xl text-lg tracking-wider">OMR</div>
+        <div>
+          <h2 class="text-sm font-bold text-slate-900 uppercase">Khởi Tạo Đợt Kiểm Tra</h2>
+          <p class="text-[11px] text-slate-500">Thiết lập thông tin đợt đánh giá định kỳ</p>
+        </div>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Môn Học (*):</label>
+          <input type="text" id="inpSubject" value="Sinh học" placeholder="Ví dụ: Sinh học, Toán, Hóa học..." class="w-full border rounded-lg px-3 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-indigo-600 outline-none" />
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Kỳ Kiểm Tra (*):</label>
+          <input type="text" id="inpPeriod" value="Giữa kỳ I" placeholder="Ví dụ: Giữa kỳ I, Định kỳ, Cuối kỳ..." class="w-full border rounded-lg px-3 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-indigo-600 outline-none" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Lớp (*):</label>
+            <input type="text" id="inpClass" value="11A" class="w-full border rounded-lg px-3 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-indigo-600 outline-none" />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Năm Học:</label>
+            <input type="text" id="inpYear" value="2026-2027" class="w-full border rounded-lg px-3 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-indigo-600 outline-none" />
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-5 flex justify-end gap-2">
+        <button onclick="closeModal('createExamModal')" class="px-3.5 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-lg">Đóng</button>
+        <button onclick="submitCreateExam()" class="px-4 py-1.5 bg-indigo-900 hover:bg-indigo-800 text-white text-xs font-bold rounded-lg shadow">Khởi Tạo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: QUẢN LÝ DANH SÁCH ĐỢT KIỂM TRA -->
+  <div id="examHistoryModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-xl w-full p-6 m-4 flex flex-col max-h-[85vh]">
+      <div class="flex justify-between items-center border-b pb-3 mb-4 shrink-0">
+        <div>
+          <h2 class="text-sm font-bold text-slate-900 uppercase">Danh Sách Đợt Kiểm Tra</h2>
+          <p class="text-[11px] text-slate-500">Lựa chọn đợt làm việc hoặc xóa các đợt không sử dụng</p>
+        </div>
+        <button onclick="closeModal('examHistoryModal')" class="text-slate-400 hover:text-slate-600 font-bold text-xl leading-none">&times;</button>
+      </div>
+
+      <div id="examHistoryList" class="space-y-2 overflow-y-auto flex-1 pr-1"></div>
+
+      <div class="mt-4 pt-3 border-t flex justify-between items-center shrink-0">
+        <button onclick="closeModal('examHistoryModal'); openModal('createExamModal');" class="text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold px-3 py-1.5 rounded-lg border border-indigo-200">
+          + Khởi Tạo Đợt Mới
+        </button>
+        <button onclick="closeModal('examHistoryModal')" class="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg">
+          Đóng
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HEADER THANH CÔNG CỤ -->
+  <header class="bg-indigo-950 text-white shadow-md px-4 py-2.5 flex justify-between items-center z-40 shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="px-2 py-1 bg-indigo-900 rounded font-black text-sm text-amber-400 tracking-wider">OMR</div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-xs font-bold tracking-wide" id="examHeaderTitle">ĐANG TẢI THÔNG TIN...</h1>
+          <button onclick="openModal('examHistoryModal')" class="text-[9px] bg-slate-800 hover:bg-slate-700 text-indigo-200 px-2 py-0.5 rounded font-semibold border border-indigo-700">Quản Lý Đợt Chấm ▾</button>
+          <button onclick="openModal('createExamModal')" class="text-[9px] bg-indigo-800 hover:bg-indigo-700 text-amber-300 px-2 py-0.5 rounded font-semibold border border-indigo-700">+ Đợt Mới</button>
+        </div>
+        <div class="flex items-center gap-2 mt-0.5">
+          <p class="text-[10px] text-indigo-300" id="examHeaderSub">Năm học: 2026-2027</p>
+          <span id="examStatusBadge" class="text-[9px] px-1.5 py-0.2 rounded font-bold bg-emerald-900 text-emerald-300">Đã sẵn sàng</span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="flex items-center gap-2">
+      <a href="/scanner" target="_blank" class="bg-amber-500 hover:bg-amber-400 text-slate-950 px-2.5 py-1.5 rounded-lg text-xs font-bold shadow flex items-center gap-1 transition">
+        <span>📱 Quét Điện Thoại</span>
+      </a>
+      <button onclick="downloadTemplate()" class="bg-indigo-900 hover:bg-indigo-800 border border-indigo-700 text-indigo-200 px-2.5 py-1.5 rounded-lg text-xs font-semibold">
+        Tải Mẫu Đáp Án
+      </button>
+      <label class="bg-indigo-700 hover:bg-indigo-600 text-white px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer border border-indigo-500 shadow">
+        Nạp File Đáp Án
+        <input type="file" id="keyPicker" accept=".xlsx,.xls" class="hidden">
+      </label>
+
+      <div class="h-5 w-px bg-indigo-800 mx-1"></div>
+
+      <!-- NÚT NẠP HÀNG LOẠT -->
+      <label class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer shadow flex items-center gap-1.5">
+        <span>+ Nạp Bài Thi (Nhiều Bài / PDF)</span>
+        <input type="file" id="filePicker" multiple accept="image/*,.pdf" class="hidden">
+      </label>
+
+      <!-- NÚT XUẤT FILE TÍCH HỢP HỘP THOẠI CHỌN NƠI LƯU (SAVE AS) -->
+      <button onclick="saveFileWithPicker('pdf')" id="btnExportPdf" class="bg-rose-700 hover:bg-rose-600 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold shadow flex items-center gap-1 transition">
+        Xuất Phiếu Đã Chấm (PDF)
+      </button>
+      <button onclick="saveFileWithPicker('excel')" id="btnExportExcel" class="bg-white text-indigo-950 hover:bg-slate-100 px-2.5 py-1.5 rounded-lg text-xs font-bold shadow flex items-center gap-1 transition">
+        Xuất Bảng Điểm (Excel)
+      </button>
+    </div>
+  </header>
+
+  <!-- BỐ CỤC 3 CỘT ĐỐI SOÁT TRỰC QUAN -->
+  <main class="w-full flex-1 grid grid-cols-12 gap-3 p-3 min-h-0">
+
+    <!-- CỘT 1: DANH SÁCH BÀI THI -->
+    <aside class="col-span-12 md:col-span-3 lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full">
+      <div class="p-2.5 border-b bg-slate-50 flex justify-between items-center shrink-0">
+        <h2 class="font-bold text-[11px] text-slate-700 uppercase tracking-wider">Danh Sách Bài Thi</h2>
+        <span id="badgeCount" class="text-[10px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-full">0 bài</span>
+      </div>
+
+      <!-- KHUNG TIẾN TRÌNH CHẤM HÀNG LOẠT -->
+      <div id="batchProgressContainer" class="p-2.5 bg-indigo-50 border-b border-indigo-100 shrink-0 hidden">
+        <div class="flex justify-between items-center text-[10px] font-bold text-indigo-950 mb-1">
+          <span id="batchProgressText">Tiến độ: 0/0 (0%)</span>
+          <button onclick="cancelBatchGrading()" class="text-[9px] text-rose-600 hover:text-rose-800 font-bold bg-white px-1.5 py-0.5 rounded border border-rose-200 shadow-xs">
+            Dừng lại
+          </button>
+        </div>
+        <div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+          <div id="batchProgressBar" class="bg-indigo-600 h-1.5 rounded-full transition-all duration-150" style="width: 0%"></div>
+        </div>
+        <div id="batchCurrentFile" class="text-[9px] text-indigo-600 mt-1 truncate">Đang xử lý: ...</div>
+      </div>
+
+      <div id="submissionList" class="divide-y divide-slate-100 overflow-y-auto flex-1 p-1.5 space-y-1">
+        <div class="text-center text-slate-400 py-20 text-[11px]">
+          Chưa có dữ liệu bài thi.
+        </div>
+      </div>
+    </aside>
+
+    <!-- CỘT 2: BẢNG ĐỐI SOÁT & ĐIỀU CHỈNH ĐIỂM -->
+    <section class="col-span-12 md:col-span-5 lg:col-span-5 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-full overflow-hidden">
+      <div id="reviewContainer" class="p-4 overflow-y-auto flex-1">
+        <div class="text-center text-slate-400 py-36 text-xs">
+          Chọn bài thi từ danh sách bên trái để kiểm tra chi tiết.
+        </div>
+      </div>
+    </section>
+
+    <!-- CỘT 3: BẢN QUÉT PHIẾU BÀI LÀM ĐÃ CHẤM -->
+    <section class="col-span-12 md:col-span-4 lg:col-span-5 bg-slate-900 rounded-xl shadow-sm border border-slate-800 flex flex-col h-full overflow-hidden">
+      <div class="p-2.5 border-b border-slate-800 bg-slate-950 flex justify-between items-center text-white shrink-0">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-200">Phiếu Trả Lời Đã Chấm</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="zoomSheet(-0.15)" class="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs font-bold" title="Thu nhỏ">-</button>
+          <button onclick="resetZoomSheet()" class="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs font-bold" title="Vừa khung">100%</button>
+          <button onclick="zoomSheet(0.15)" class="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs font-bold" title="Phóng to">+</button>
+          <button onclick="openGradedTab()" class="px-2 py-0.5 bg-indigo-700 hover:bg-indigo-600 text-white rounded text-[11px] font-semibold" title="Mở tab mới">
+            Xem Ảnh Gốc ↗
+          </button>
+        </div>
+      </div>
+
+      <div id="sheetViewer" class="flex-1 overflow-auto p-3 flex justify-center items-start bg-slate-900">
+        <div id="sheetEmptyNotice" class="text-slate-500 text-xs text-center py-40">
+          Chưa chọn bài thi.
+        </div>
+        <img id="gradedSheetImg" src="" alt="Bản quét phiếu bài làm đã chấm" class="hidden transition-transform origin-top duration-150 rounded shadow-2xl max-w-full" />
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    let currentSession = null;
+    let currentSubmissions = [];
+    let selectedSubId = null;
+    let currentSheetZoom = 1.0;
+    let isBatchCancelled = false;
+
+    window.addEventListener("DOMContentLoaded", async () => {
+      await refreshSession();
+
+      const savedSubId = localStorage.getItem("omr_active_sub_id");
+      if (savedSubId && currentSubmissions.some(s => s.submission_id === savedSubId)) {
+        selectSubmission(savedSubId);
+      } else if (currentSubmissions.length > 0) {
+        selectSubmission(currentSubmissions[0].submission_id);
+      }
+    });
+
+    async function refreshSession() {
+      try {
+        const res = await fetch("/api/session");
+        currentSession = await res.json();
+        currentSubmissions = currentSession.submissions || [];
+
+        const info = currentSession.exam_info;
+        if (info) {
+          document.getElementById("examHeaderTitle").innerText = `${info.subject.toUpperCase()} - ${info.period.toUpperCase()} (${info.class_name})`;
+          document.getElementById("examHeaderSub").innerText = `Năm học: ${info.school_year}`;
+
+          const badge = document.getElementById("examStatusBadge");
+          if (info.is_configured) {
+            badge.className = "text-[9px] px-1.5 py-0.2 rounded font-bold bg-emerald-900 text-emerald-300";
+            badge.innerText = "Đã sẵn sàng chấm";
+          } else {
+            badge.className = "text-[9px] px-1.5 py-0.2 rounded font-bold bg-amber-900 text-amber-300";
+            badge.innerText = "Chưa cấu hình đáp án";
+          }
+        }
+
+        renderExamHistory(currentSession.all_exams || []);
+        renderList();
+
+        if (selectedSubId) {
+          const stillExists = currentSubmissions.find(s => s.submission_id === selectedSubId);
+          if (stillExists) selectSubmission(selectedSubId);
+          else {
+            selectedSubId = null;
+            clearReviewViews();
+          }
+        } else if (currentSubmissions.length > 0) {
+          selectSubmission(currentSubmissions[0].submission_id);
+        } else {
+          clearReviewViews();
+        }
+      } catch (e) {
+        console.error("Lỗi đồng bộ dữ liệu phiên:", e);
+      }
+    }
+
+    function clearReviewViews() {
+      document.getElementById("reviewContainer").innerHTML = `
+        <div class="text-center text-slate-400 py-36 text-xs">
+          Chưa chọn bài thi.<br>Nhấn <b>+ Nạp Bài Thi</b> để bắt đầu.
+        </div>`;
+      const sheetImg = document.getElementById("gradedSheetImg");
+      const emptyNotice = document.getElementById("sheetEmptyNotice");
+      sheetImg.classList.add("hidden");
+      emptyNotice.classList.remove("hidden");
+      localStorage.removeItem("omr_active_sub_id");
+    }
+
+    function openModal(id) { document.getElementById(id).classList.remove("hidden"); }
+    function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
+
+    function renderExamHistory(allExams) {
+      const container = document.getElementById("examHistoryList");
+      if (!allExams || allExams.length === 0) {
+        container.innerHTML = `<div class="text-center py-8 text-xs text-slate-400">Chưa có đợt kiểm tra nào.</div>`;
+        return;
+      }
+
+      container.innerHTML = allExams.map(ex => `
+        <div class="p-3 rounded-xl border transition flex justify-between items-center ${ex.is_active ? 'bg-indigo-50 border-indigo-500 ring-1 ring-indigo-500' : 'bg-white hover:bg-slate-50 border-slate-200'}">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-xs text-slate-900">${ex.title}</span>
+              ${ex.is_active ? `<span class="bg-indigo-600 text-white text-[9px] px-2 py-0.2 rounded-full font-bold">Hiện tại</span>` : ''}
+            </div>
+            <div class="text-[11px] text-slate-500 mt-0.5">
+              Khởi tạo: <b>${ex.created_at || 'Mặc định'}</b> | Đã chấm: <b class="text-emerald-700">${ex.submission_count} bài</b>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5">
+            ${!ex.is_active ? `
+              <button onclick="switchExamSession('${ex.id}')" class="px-2.5 py-1 bg-indigo-900 hover:bg-indigo-800 text-white rounded-lg text-xs font-semibold shadow">
+                Mở Đợt
+              </button>
+            ` : ''}
+            <button onclick="deleteExamSession('${ex.id}', '${ex.title}')" class="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-lg text-xs font-bold transition" title="Xóa đợt kiểm tra này">
+              Xóa
+            </button>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    async function deleteExamSession(examId, examTitle) {
+      if (!confirm(`Xác nhận xóa đợt kiểm tra: "${examTitle}"?\nDữ liệu bài làm trong đợt này sẽ bị xóa khỏi hệ thống.`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/delete-exam/${examId}`, { method: "DELETE" });
+        if (res.ok) {
+          selectedSubId = null;
+          localStorage.removeItem("omr_active_sub_id");
+          await refreshSession();
+        } else {
+          const err = await res.json();
+          alert("Lỗi: " + (err.detail || "Không thể xóa đợt này"));
+        }
+      } catch (e) {
+        alert("Lỗi kết nối: " + e.message);
+      }
+    }
+
+    async function switchExamSession(examId) {
+      try {
+        const res = await fetch(`/api/switch-exam/${examId}`, { method: "POST" });
+        if (res.ok) {
+          closeModal("examHistoryModal");
+          selectedSubId = null;
+          localStorage.removeItem("omr_active_sub_id");
+          await refreshSession();
+        }
+      } catch (err) {
+        alert("Lỗi chuyển đợt kiểm tra: " + err.message);
+      }
+    }
+
+    async function submitCreateExam() {
+      const payload = {
+        subject: document.getElementById("inpSubject").value,
+        period: document.getElementById("inpPeriod").value,
+        class_name: document.getElementById("inpClass").value,
+        school_year: document.getElementById("inpYear").value
+      };
+      await fetch("/api/create-exam", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      closeModal("createExamModal");
+      selectedSubId = null;
+      localStorage.removeItem("omr_active_sub_id");
+      await refreshSession();
+    }
+
+    document.getElementById("keyPicker").addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const fd = new FormData();
+      fd.append("file", file);
+
+      try {
+        const res = await fetch("/api/upload-answer-key", { method: "POST", body: fd });
+        const data = await res.json();
+        alert(`Đã nạp đáp án thành công cho các mã đề: ${data.codes_loaded.join(", ")}.`);
+        await refreshSession();
+      } catch (err) {
+        alert("Lỗi nạp file đáp án: " + err.message);
+      }
+    });
+
+    // CHẤM HÀNG LOẠT TUẦN TỰ
+    document.getElementById("filePicker").addEventListener("change", async (e) => {
+      const files = Array.from(e.target.files);
+      if (!files.length) return;
+
+      e.target.value = "";
+
+      const progressContainer = document.getElementById("batchProgressContainer");
+      const progressBar = document.getElementById("batchProgressBar");
+      const progressText = document.getElementById("batchProgressText");
+      const currentFileText = document.getElementById("batchCurrentFile");
+
+      progressContainer.classList.remove("hidden");
+      isBatchCancelled = false;
+
+      const totalFiles = files.length;
+      let processedFiles = 0;
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (let i = 0; i < totalFiles; i++) {
+        if (isBatchCancelled) {
+          alert(`Đã dừng tiến trình chấm hàng loạt. Đã xử lý ${processedFiles}/${totalFiles} tệp.`);
+          break;
+        }
+
+        const file = files[i];
+        currentFileText.innerText = `Đang xử lý (${i + 1}/${totalFiles}): ${file.name}`;
+
+        const fd = new FormData();
+        fd.append("file", file);
+
+        try {
+          const res = await fetch("/api/grade-single-file", {
+            method: "POST",
+            body: fd
+          });
+
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || `HTTP Error: ${res.status}`);
+          }
+
+          const data = await res.json();
+          if (data.new_submissions && data.new_submissions.length > 0) {
+            for (let newSub of data.new_submissions) {
+              const existingIdx = currentSubmissions.findIndex(s => s.submission_id === newSub.submission_id);
+              if (existingIdx >= 0) {
+                currentSubmissions[existingIdx] = newSub;
+              } else {
+                currentSubmissions.push(newSub);
+              }
+              if (newSub.has_error) errorCount++;
+              else successCount++;
+            }
+
+            renderList();
+
+            if (!selectedSubId && currentSubmissions.length > 0) {
+              selectSubmission(currentSubmissions[currentSubmissions.length - 1].submission_id);
+            }
+          }
+        } catch (err) {
+          console.error(`Lỗi chấm file ${file.name}:`, err);
+          errorCount++;
+        }
+
+        processedFiles++;
+        const percent = Math.round((processedFiles / totalFiles) * 100);
+        progressBar.style.width = `${percent}%`;
+        progressText.innerText = `Tiến độ: ${processedFiles}/${totalFiles} (${percent}%)`;
+      }
+
+      setTimeout(() => {
+        progressContainer.classList.add("hidden");
+        progressBar.style.width = "0%";
+        if (!isBatchCancelled) {
+          alert(`Đã hoàn tất chấm hàng loạt!\n- Thành công: ${successCount} bài\n- Lỗi nhận diện: ${errorCount} bài`);
+        }
+        refreshSession();
+      }, 800);
+    });
+
+    function cancelBatchGrading() {
+      isBatchCancelled = true;
+    }
+
+    function renderList() {
+      const el = document.getElementById("submissionList");
+      document.getElementById("badgeCount").innerText = `${currentSubmissions.length} bài`;
+
+      if (currentSubmissions.length === 0) {
+        el.innerHTML = `<div class="text-center text-slate-400 py-24 text-[11px]">Chưa có dữ liệu bài thi.</div>`;
+        return;
+      }
+
+      el.innerHTML = currentSubmissions.map(sub => {
+        const isSelected = sub.submission_id === selectedSubId;
+        const hasWarning = sub.anomalies && sub.anomalies.length > 0;
+        const hasErr = sub.has_error;
+
+        return `
+          <div onclick="selectSubmission('${sub.submission_id}')"
+               class="group relative p-2 rounded-lg cursor-pointer transition border text-left ${isSelected ? 'bg-indigo-50 border-indigo-500 shadow-sm' : 'hover:bg-slate-50 border-slate-200'}">
+            <div class="flex justify-between items-start">
+              <span class="font-bold text-[11px] text-slate-800 truncate max-w-[120px]" title="${sub.file_name}">${sub.file_name}</span>
+              <span class="font-bold text-[11px] ${hasErr ? 'text-rose-600' : (hasWarning ? 'text-amber-600' : 'text-emerald-600')}">
+                ${hasErr ? 'LỖI' : (sub.scores ? sub.scores.total + ' đ' : '0 đ')}
+              </span>
+            </div>
+            <div class="flex justify-between items-center text-[10px] text-slate-500 mt-0.5">
+              <span>SBD: <b>${sub.sbd}</b> | Đề: <b>${sub.exam_code}</b></span>
+              ${hasErr ? `<span class="bg-rose-100 text-rose-800 px-1 py-0.2 rounded font-semibold text-[8px]">Lỗi</span>` :
+                (hasWarning ? `<span class="bg-amber-100 text-amber-800 px-1 py-0.2 rounded font-semibold text-[8px]">${sub.anomalies.length} cờ</span>` : `<span class="text-emerald-600 font-semibold text-[8px]">Hợp lệ</span>`)}
+            </div>
+            <button onclick="event.stopPropagation(); deleteSubmission('${sub.submission_id}', '${sub.file_name}');"
+                    class="opacity-0 group-hover:opacity-100 absolute top-1 right-1 bg-white hover:bg-rose-100 text-rose-600 p-1 rounded border border-slate-200 shadow-sm transition"
+                    title="Xóa bài thi này">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            </button>
+          </div>`;
+      }).join("");
+    }
+
+    function selectSubmission(subId) {
+      selectedSubId = subId;
+      localStorage.setItem("omr_active_sub_id", subId);
+      renderList();
+      const sub = currentSubmissions.find(s => s.submission_id === subId);
+      if (!sub) return;
+
+      const sheetImg = document.getElementById("gradedSheetImg");
+      const emptyNotice = document.getElementById("sheetEmptyNotice");
+      const versionTag = sub.updated_at ? `?v=${encodeURIComponent(sub.updated_at)}` : '';
+      sheetImg.src = `/api/graded-image/${sub.submission_id}${versionTag}`;
+      sheetImg.classList.remove("hidden");
+      emptyNotice.classList.add("hidden");
+      resetZoomSheet();
+
+      const container = document.getElementById("reviewContainer");
+      if (sub.has_error) {
+        container.innerHTML = `
+          <div class="p-6 bg-rose-50 border border-rose-200 rounded-xl text-center">
+            <h3 class="text-sm font-bold text-rose-800 mb-1">Không thể nhận diện bài làm</h3>
+            <p class="text-xs text-rose-600 mb-4">${sub.error_msg || 'Ảnh bài thi bị mất góc mốc định vị.'}</p>
+            <button onclick="deleteSubmission('${sub.submission_id}', '${sub.file_name}')" class="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold">
+              Xóa Bản Ghi Này
+            </button>
+          </div>`;
+        return;
+      }
+
+      const p1 = sub.details?.part1 || {};
+      const p2 = sub.details?.part2 || {};
+      const p3 = sub.details?.part3 || {};
+
+      container.innerHTML = `
+        <div class="flex justify-between items-center border-b pb-2.5 mb-3">
+          <div>
+            <h3 class="text-xs font-bold text-slate-900 truncate max-w-[200px]">${sub.file_name}</h3>
+            <p class="text-[10px] text-slate-400">Mã bài: ${sub.submission_id}</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="text-right mr-1">
+              <span class="text-[9px] text-slate-400 block font-bold leading-tight">TỔNG ĐIỂM</span>
+              <span class="text-xl font-black text-rose-600" id="liveTotal">${sub.scores ? sub.scores.total : 0} <span class="text-[10px] font-normal text-slate-400">/ 10</span></span>
+            </div>
+            <button onclick="triggerInstantRegrade('${sub.submission_id}')" class="bg-indigo-900 hover:bg-indigo-800 text-white font-semibold text-xs px-2.5 py-1.5 rounded-lg shadow">
+              Cập Nhật Kết Quả
+            </button>
+            <button onclick="deleteSubmission('${sub.submission_id}', '${sub.file_name}')" class="bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-xs px-2.5 py-1.5 rounded-lg transition" title="Xóa bài thi này">
+              Xóa
+            </button>
+          </div>
+        </div>
+
+        ${sub.anomalies && sub.anomalies.length > 0 ? `
+          <div class="mb-3 bg-amber-50 border border-amber-200 rounded-lg p-2">
+            <h4 class="text-[10px] font-bold text-amber-900 uppercase mb-0.5">Lưu ý đối soát (${sub.anomalies.length}):</h4>
+            <ul class="text-[11px] text-amber-800 list-disc list-inside space-y-0.5">
+              ${sub.anomalies.map(a => `<li>${a.msg}</li>`).join("")}
+            </ul>
+          </div>` : ""}
+
+        <div class="mb-3 bg-slate-50 border rounded-lg p-2">
+          <label class="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+            Thông tin thí sinh (Đối soát viết tay)
+          </label>
+          <img src="/api/crop-info/${sub.submission_id}?t=${Date.now()}" 
+               class="w-full max-h-40 object-contain rounded border border-slate-300 bg-white shadow-xs mb-2 transition-all hover:scale-105 origin-top" 
+               alt="Thông tin viết tay thí sinh" />
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[10px] font-bold text-slate-600 mb-0.5">Số báo danh / Mã thí sinh:</label>
+              <input type="text" id="editSbd" value="${sub.sbd}" class="w-full border rounded px-2 py-1 text-xs font-mono font-bold text-indigo-950 focus:ring-1 focus:ring-indigo-600 outline-none" />
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-0.5">
+                <label class="text-[10px] font-bold text-slate-600">Mã đề thi:</label>
+                <button onclick="triggerInstantRegrade('${sub.submission_id}')" class="text-[9px] bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-1.5 py-0.5 rounded shadow">
+                  Chấm Lại Điểm ↻
+                </button>
+              </div>
+              <input type="text" id="editMade" value="${sub.exam_code}" 
+                onchange="triggerInstantRegrade('${sub.submission_id}')"
+                placeholder="Nhập 4 số mã đề..."
+                class="w-full border-2 border-indigo-400 rounded px-2 py-1 text-xs font-mono font-bold text-indigo-950 bg-amber-50 focus:bg-white focus:ring-2 focus:ring-indigo-600 outline-none" />
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-2.5">
+          <!-- Phần I -->
+          <div class="border rounded-lg p-2 bg-white">
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-[11px] font-bold text-slate-700">Phần I: Trắc nghiệm 4 lựa chọn (${Object.keys(p1).length} câu)</span>
+              <span class="text-[11px] font-bold text-emerald-700" id="liveP1">${sub.scores ? sub.scores.p1 : 0} đ</span>
+            </div>
+            <div class="grid grid-cols-8 gap-1 text-xs">
+              ${Object.entries(p1).map(([q, ans]) => `
+                <div class="p-1 rounded border text-center ${ans ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 text-slate-400'}">
+                  <div class="text-[8px] text-slate-400 font-mono">C${q}</div>
+                  <input type="text" id="p1_q${q}" value="${ans}" maxlength="1" class="w-full text-center font-bold text-xs uppercase bg-transparent outline-none focus:bg-amber-100" />
+                </div>`).join("")}
+            </div>
+          </div>
+
+          <!-- Phần II -->
+          <div class="border rounded-lg p-2 bg-white">
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-[11px] font-bold text-slate-700">Phần II: Đúng / Sai (${Object.keys(p2).length} câu)</span>
+              <span class="text-[11px] font-bold text-emerald-700" id="liveP2">${sub.scores ? sub.scores.p2 : 0} đ</span>
+            </div>
+            <div class="grid grid-cols-4 gap-2 text-xs">
+              ${Object.entries(p2).map(([q, rows]) => `
+                <div class="border rounded p-1 bg-slate-50">
+                  <div class="font-bold text-slate-700 mb-0.5 text-[10px]">Câu ${q}</div>
+                  <div class="grid grid-cols-4 gap-1 text-center font-mono">
+                    ${['a', 'b', 'c', 'd'].map(k => `
+                      <div>
+                        <div class="text-[8px] text-slate-400">${k}</div>
+                        <input type="text" id="p2_q${q}_${k}" value="${rows[k] || ''}" maxlength="1" class="w-full text-center font-bold border rounded bg-white text-[10px] focus:bg-amber-100" />
+                      </div>`).join("")}
+                  </div>
+                </div>`).join("")}
+            </div>
+          </div>
+
+          <!-- Phần III -->
+          <div class="border rounded-lg p-2 bg-white">
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-[11px] font-bold text-slate-700">Phần III: Trả lời ngắn (${Object.keys(p3).length} câu)</span>
+              <span class="text-[11px] font-bold text-emerald-700" id="liveP3">${sub.scores ? sub.scores.p3 : 0} đ</span>
+            </div>
+            <div class="grid grid-cols-4 gap-1.5 text-xs">
+              ${Object.entries(p3).map(([q, item]) => {
+                const isErr = !item.is_valid && item.raw_string && item.raw_string !== "____";
+                return `
+                <div class="border rounded p-1 text-center ${isErr ? 'bg-rose-50 border-rose-300' : 'bg-slate-50'}">
+                  <div class="font-bold text-slate-600 mb-0.5 text-[10px]">Câu ${q}</div>
+                  <input type="number" step="any" id="p3_q${q}"
+                         value="${item.is_valid && item.normalized_value !== null ? item.normalized_value : ''}"
+                         placeholder="${isErr ? 'LỖI (0đ)' : ''}"
+                         class="w-full border rounded text-center font-bold px-1 py-0.5 text-xs ${isErr ? 'border-rose-400 bg-white text-rose-700 placeholder-rose-500' : 'bg-white'} focus:bg-amber-100" />
+                  <span class="text-[9px] block mt-0.5 font-mono ${isErr ? 'text-rose-600 font-bold' : 'text-slate-400'}">
+                    Đọc: ${item.raw_string || '-'}
+                  </span>
+                </div>`;
+              }).join("")}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function deleteSubmission(subId, fileName) {
+      if (!confirm(`Xác nhận xóa bài thi: "${fileName}" khỏi đợt chấm?`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/delete-submission/${subId}`, { method: "DELETE" });
+        if (res.ok) {
+          if (selectedSubId === subId) {
+            selectedSubId = null;
+            localStorage.removeItem("omr_active_sub_id");
+          }
+          await refreshSession();
+        } else {
+          alert("Lỗi: Không thể xóa bài thi này.");
+        }
+      } catch (e) {
+        alert("Lỗi kết nối: " + e.message);
+      }
+    }
+
+    async function triggerInstantRegrade(subId) {
+      const sub = currentSubmissions.find(s => s.submission_id === subId);
+      if (!sub) return;
+
+      const editMadeInput = document.getElementById("editMade");
+      const editSbdInput = document.getElementById("editSbd");
+
+      const newExamCode = editMadeInput ? editMadeInput.value.trim().padStart(4, '0') : sub.exam_code;
+      const newSbd = editSbdInput ? editSbdInput.value.trim() : sub.sbd;
+
+      const p1Data = {};
+      for (let q in (sub.details?.part1 || {})) {
+        const inp = document.getElementById(`p1_q${q}`);
+        p1Data[q] = inp ? inp.value.trim().toUpperCase() : sub.details.part1[q];
+      }
+
+      const p2Data = {};
+      for (let q in (sub.details?.part2 || {})) {
+        p2Data[q] = {};
+        for (let k of ['a', 'b', 'c', 'd']) {
+          const inp = document.getElementById(`p2_q${q}_${k}`);
+          p2Data[q][k] = inp ? inp.value.trim().toUpperCase() : (sub.details.part2[q] ? sub.details.part2[q][k] : "");
+        }
+      }
+
+      const p3Data = {};
+      for (let q in (sub.details?.part3 || {})) {
+        const inp = document.getElementById(`p3_q${q}`);
+        p3Data[q] = (inp && inp.value !== "") ? parseFloat(inp.value) : (sub.details.part3[q] ? sub.details.part3[q].normalized_value : null);
+      }
+
+      const payload = {
+        submission_id: subId,
+        sbd: newSbd,
+        exam_code: newExamCode,
+        part1: p1Data,
+        part2: p2Data,
+        part3: p3Data
+      };
+
+      try {
+        const res = await fetch("/api/update-submission", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) throw new Error("Máy chủ phản hồi lỗi khi cập nhật.");
+
+        const data = await res.json();
+        const updated = data.updated_submission;
+
+        const idx = currentSubmissions.findIndex(s => s.submission_id === subId);
+        if (idx >= 0) {
+          currentSubmissions[idx] = updated;
+        }
+
+        renderList();
+        selectSubmission(subId);
+
+        const sheetImg = document.getElementById("gradedSheetImg");
+        if (sheetImg) {
+          sheetImg.src = `/api/graded-image/${subId}?t=${Date.now()}`;
+        }
+      } catch (err) {
+        alert("Lỗi khi chấm lại điểm: " + err.message);
+      }
+    }
+
+    function zoomSheet(delta) {
+      currentSheetZoom = Math.max(0.5, Math.min(2.5, currentSheetZoom + delta));
+      document.getElementById("gradedSheetImg").style.transform = `scale(${currentSheetZoom})`;
+    }
+    function resetZoomSheet() {
+      currentSheetZoom = 1.0;
+      document.getElementById("gradedSheetImg").style.transform = "scale(1.0)";
+    }
+    function openGradedTab() {
+      if (selectedSubId) {
+        window.open(`/api/graded-image/${selectedSubId}`, "_blank");
+      }
+    }
+
+    function downloadTemplate() { window.location.href = "/api/download-template"; }
+
+    // =========================================================================
+    // HỘP THOẠI CHỌN NƠI LƯU (SAVE AS DIALOG) TÍCH HỢP CHO PDF VÀ EXCEL
+    // =========================================================================
+    async function saveFileWithPicker(fileType) {
+      const isPdf = fileType === 'pdf';
+      const btn = document.getElementById(isPdf ? "btnExportPdf" : "btnExportExcel");
+      const oldHtml = btn.innerHTML;
+      btn.innerHTML = `<span class="inline-block animate-spin mr-1">⏳</span> Đang tạo...`;
+      btn.disabled = true;
+
+      const endpoint = isPdf ? "/api/export-graded-pdf" : "/api/export-excel";
+      const mimeType = isPdf 
+        ? "application/pdf" 
+        : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+      const ext = isPdf ? ".pdf" : ".xlsx";
+      const desc = isPdf ? "Tập phiếu đã chấm PDF" : "Bảng điểm Excel";
+
+      try {
+        const res = await fetch(endpoint);
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({ detail: "Mã lỗi HTTP: " + res.status }));
+          throw new Error(errData.detail || "Không thể xuất tệp dữ liệu.");
+        }
+
+        // Lấy tên tệp gợi ý từ header Content-Disposition
+        let suggestedName = isPdf ? `TAP_PHIEU_DA_CHAM_${Date.now()}.pdf` : `BANG_DIEM_${Date.now()}.xlsx`;
+        const disposition = res.headers.get("content-disposition");
+        if (disposition && disposition.indexOf("filename=") !== -1) {
+          const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
+          if (matches != null && matches[1]) {
+            suggestedName = matches[1].replace(/['"]/g, '');
+          }
+        }
+
+        const blob = await res.blob();
+
+        // 1. NẾU TRÌNH DUYỆT HỖ TRỢ FILE SYSTEM ACCESS API: MỞ CỬA SỔ CHỌN NƠI LƯU (SAVE AS)
+        if ('showSaveFilePicker' in window) {
+          try {
+            const handle = await window.showSaveFilePicker({
+              suggestedName: suggestedName,
+              types: [{
+                description: desc,
+                accept: { [mimeType]: [ext] }
+              }]
+            });
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            alert(`[✓] Đã lưu tệp thành công vào vị trí bạn đã chọn!`);
+            return;
+          } catch (pickerErr) {
+            // Nếu người dùng chủ động nhấn 'Cancel' trên cửa sổ Save As
+            if (pickerErr.name === 'AbortError') {
+              return;
+            }
+            console.warn("showSaveFilePicker thất bại, chuyển sang chế độ tải trực tiếp:", pickerErr);
+          }
+        }
+
+        // 2. PHƯƠNG ÁN DỰ PHÒNG AN TOÀN (FALLBACK)
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.style.display = "none";
+        a.href = url;
+        a.download = suggestedName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+      } catch (err) {
+        alert("Thông báo xuất tệp: " + err.message);
+      } finally {
+        btn.innerHTML = oldHtml;
+        btn.disabled = false;
+      }
+    }
+
+    // SMART AUTO-POLLING TỪ THIẾT BỊ DI ĐỘNG (DUY NHẤT 1 VÒNG LẶP)
+    setInterval(async () => {
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")) {
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/session");
+        if (!res.ok) return;
+        const data = await res.json();
+        const serverSubs = data.submissions || [];
+
+        if (serverSubs.length !== currentSubmissions.length) {
+          const isNewAdded = serverSubs.length > currentSubmissions.length;
+          currentSubmissions = serverSubs;
+          renderList();
+
+          if (isNewAdded && currentSubmissions.length > 0) {
+            const newestSub = currentSubmissions[currentSubmissions.length - 1];
+            selectSubmission(newestSub.submission_id);
+
+            const badge = document.getElementById("badgeCount");
+            badge.className = "text-[10px] bg-emerald-500 text-white font-bold px-2.5 py-0.5 rounded-full animate-bounce";
+            setTimeout(() => {
+              badge.className = "text-[10px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-full";
+            }, 1800);
+          }
+        }
+      } catch (e) {
+        // Bỏ qua lỗi ngắt quãng mạng
+      }
+    }, 2000);
+  </script>
+</body>
+</html>

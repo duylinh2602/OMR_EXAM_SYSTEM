@@ -1,0 +1,868 @@
+<!-- templates/mobile_scanner.html -->
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>OMR Chấm Thi Di Động</title>
+  
+  <!-- PWA Meta Tags -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="OMR Chấm Thi">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      touch-action: pan-y;
+      background-color: #020617;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .viewfinder-mask { box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.72); }
+    .target-reticle {
+      width: 48px; height: 48px; position: absolute;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s ease-out; z-index: 20;
+    }
+    .reticle-red {
+      border: 3px solid #ef4444; background-color: rgba(239, 68, 68, 0.15);
+      box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+    }
+    .reticle-red::after { content: '+'; color: #ef4444; font-size: 24px; font-weight: 900; }
+    .reticle-green {
+      border: 3px solid #10b981 !important; background-color: rgba(16, 185, 129, 0.3) !important;
+      box-shadow: 0 0 18px rgba(16, 185, 129, 0.9) !important; transform: scale(1.08);
+    }
+    .reticle-green::after { content: '✓'; color: #10b981; font-size: 24px; font-weight: 900; }
+    
+    .tab-content { display: none; }
+    .tab-content.active { display: flex; }
+    
+    /* Custom Scrollbar for Results */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-between text-white font-sans select-none overflow-hidden">
+
+  <!-- ========================================================================= -->
+  <!-- TOP HEADER (DÙNG CHUNG) -->
+  <!-- ========================================================================= -->
+  <header class="w-full px-4 py-2.5 bg-slate-900/95 backdrop-blur z-30 flex justify-between items-center shrink-0 border-b border-slate-800">
+    <div class="flex items-center gap-2">
+      <div class="w-7 h-7 bg-amber-500 text-slate-950 font-black rounded-lg flex items-center justify-center text-xs tracking-wider shadow">
+        OMR
+      </div>
+      <div>
+        <h1 class="text-xs font-bold text-amber-400 uppercase tracking-wide truncate max-w-[170px]" id="headerExamTitle">
+          ĐANG TẢI...
+        </h1>
+        <p class="text-[10px] text-slate-400" id="headerExamSubtitle">Đợt kiểm tra hiện tại</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-1.5">
+      <span id="badgeSubCount" class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">
+        0 bài
+      </span>
+      <button id="btnPwaInstall" onclick="promptPwaInstall()" class="hidden px-2 py-0.5 rounded text-[10px] font-bold bg-amber-600 text-white animate-pulse">
+        + Cài App
+      </button>
+    </div>
+  </header>
+
+  <!-- ========================================================================= -->
+  <!-- MAIN TABS CONTAINER -->
+  <!-- ========================================================================= -->
+  <div class="flex-1 w-full relative overflow-hidden flex flex-col">
+
+    <!-- ----------------------------------------------------------------------- -->
+    <!-- TAB 1: CAMERA SCANNER -->
+    <!-- ----------------------------------------------------------------------- -->
+    <div id="tabScanner" class="tab-content active relative flex-1 w-full flex-col items-center justify-center overflow-hidden">
+      <video id="videoElement" playsinline autoplay class="absolute w-full h-full object-cover"></video>
+
+      <!-- Khung ngắm A4 -->
+      <div id="viewfinder" class="relative z-10 w-[86%] max-w-[340px] aspect-[1/1.414] border-2 border-red-500/70 rounded-2xl viewfinder-mask transition-all duration-200 flex flex-col justify-between p-2 pointer-events-none">
+        <div id="reticle-tl" class="target-reticle reticle-red top-2 left-2 rounded-xl"></div>
+        <div id="reticle-tr" class="target-reticle reticle-red top-2 right-2 rounded-xl"></div>
+        <div id="reticle-bl" class="target-reticle reticle-red bottom-2 left-2 rounded-xl"></div>
+        <div id="reticle-br" class="target-reticle reticle-red bottom-2 right-2 rounded-xl"></div>
+
+        <div class="w-full text-center text-[9px] text-slate-400 font-mono tracking-widest mt-1">MỐC TRÊN</div>
+        
+        <!-- HỘP HƯỚNG DẪN ĐIỀU HƯỚNG -->
+        <div id="guidanceBox" class="text-center text-xs font-bold text-amber-300 bg-black/85 px-4 py-2 rounded-full mx-auto shadow-xl border border-amber-500/50 transition-all flex items-center gap-1.5 pointer-events-auto">
+          <span id="guideIcon">🔍</span>
+          <span id="guideText">Đưa 4 góc bài thi vào 4 ô vuông ngắm</span>
+        </div>
+
+        <div class="w-full text-center text-[9px] text-slate-400 font-mono tracking-widest mb-1">MỐC DƯỚI</div>
+      </div>
+
+      <!-- THANH ĐIỀU KHIỂN CAMERA PHÍA TRÊN NÚT BẤM -->
+      <div class="absolute bottom-4 left-0 right-0 z-20 px-6 flex justify-around items-center">
+        <button onclick="switchCamera()" class="p-3 bg-slate-900/80 backdrop-blur rounded-full text-slate-300 border border-slate-700 active:scale-95 transition" title="Đổi camera">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+        </button>
+
+        <!-- Nút chụp tay -->
+        <button id="snapBtn" onclick="triggerManualCapture()" class="w-16 h-16 rounded-full border-4 border-white bg-emerald-600 hover:bg-emerald-500 active:scale-90 transition flex items-center justify-center shadow-lg shadow-emerald-600/40">
+          <div class="w-12 h-12 rounded-full border-2 border-black/20 bg-white"></div>
+        </button>
+
+        <button onclick="toggleTorch()" class="p-3 bg-slate-900/80 backdrop-blur rounded-full text-slate-300 border border-slate-700 active:scale-95 transition" title="Đèn Flash">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+        </button>
+      </div>
+
+      <!-- TOAST THÔNG BÁO KẾT QUẢ VỪA CHẤM XONG -->
+      <div id="recentResultDrawer" class="absolute bottom-24 left-4 right-4 z-30 bg-slate-900/95 border border-emerald-500/60 rounded-2xl p-3.5 shadow-2xl backdrop-blur hidden flex items-center justify-between transition-all">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 bg-emerald-600/30 border border-emerald-500 rounded-xl flex flex-col items-center justify-center shrink-0">
+            <span class="text-[9px] text-emerald-300 font-bold uppercase">Điểm</span>
+            <span id="toastTotalScore" class="text-base font-black text-white leading-none">0.0</span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold text-white">SBD: <span id="toastSbd" class="text-amber-400">---</span></span>
+              <span class="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.2 rounded font-mono">Đề: <span id="toastExamCode">---</span></span>
+            </div>
+            <p class="text-[10px] text-emerald-400 mt-0.5" id="toastBreakdown">P1: 0.0 | P2: 0.0 | P3: 0.0</p>
+          </div>
+        </div>
+        <div class="flex flex-col gap-1.5 shrink-0">
+          <button onclick="viewLatestGradedImage()" class="px-2.5 py-1 bg-indigo-600 text-white rounded-lg text-[10px] font-bold">Xem ảnh</button>
+          <button onclick="closeResultToast()" class="px-2.5 py-1 bg-slate-800 text-slate-400 rounded-lg text-[10px]">Đóng</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ----------------------------------------------------------------------- -->
+    <!-- TAB 2: BẢNG ĐIỂM & DANH SÁCH BÀI CHẤM -->
+    <!-- ----------------------------------------------------------------------- -->
+    <div id="tabResults" class="tab-content w-full h-full flex-col bg-slate-950 overflow-hidden">
+      <!-- Search Bar -->
+      <div class="p-3 border-b border-slate-800 bg-slate-900/70 flex gap-2 items-center shrink-0">
+        <div class="relative flex-1">
+          <input type="text" id="searchSbdInput" oninput="renderSubmissionsList()" placeholder="Tìm số báo danh, mã đề..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none focus:border-indigo-500" />
+        </div>
+        <button onclick="refreshSubmissions()" class="p-1.5 bg-slate-800 text-slate-300 rounded-xl border border-slate-700 text-xs">
+          🔄
+        </button>
+      </div>
+
+      <!-- Danh sách bài thi -->
+      <div id="resultsListContainer" class="flex-1 overflow-y-auto p-3 space-y-2">
+        <div class="text-center text-slate-500 py-20 text-xs">
+          Đang tải danh sách bài làm...
+        </div>
+      </div>
+    </div>
+
+    <!-- ----------------------------------------------------------------------- -->
+    <!-- TAB 3: QUẢN LÝ ĐỀ & XUẤT FILE -->
+    <!-- ----------------------------------------------------------------------- -->
+    <div id="tabExam" class="tab-content w-full h-full flex-col bg-slate-950 overflow-y-auto p-4 space-y-4">
+      
+      <!-- Card: Thông tin đợt kiểm tra -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <div class="flex justify-between items-start mb-2">
+          <div>
+            <span class="text-[10px] text-indigo-400 font-bold uppercase tracking-wider">Đợt kiểm tra hiện tại</span>
+            <h2 class="text-base font-bold text-white mt-0.5" id="cardExamSubject">---</h2>
+            <p class="text-xs text-slate-400" id="cardExamDetails">---</p>
+          </div>
+          <span id="cardAnswerStatus" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800">
+            Chưa có đáp án
+          </span>
+        </div>
+
+        <div class="mt-3 pt-3 border-t border-slate-800/80 flex flex-col gap-2">
+          <!-- Nạp file đáp án -->
+          <label class="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow">
+            <span>📄 Nạp File Đáp Án (Excel)</span>
+            <input type="file" id="mobileKeyPicker" accept=".xlsx,.xls" class="hidden" onchange="uploadAnswerKeyMobile(event)">
+          </label>
+        </div>
+      </div>
+
+      <!-- Card: Xuất Báo Cáo & Bảng Điểm -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2.5">
+        <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Xuất Dữ Liệu Chấm Thi</h3>
+        
+        <button onclick="exportExcelMobile()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow">
+          <span>📊 Tải Bảng Điểm Excel (.xlsx)</span>
+        </button>
+
+        <button onclick="exportPdfMobile()" class="w-full py-2.5 bg-rose-700 hover:bg-rose-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow">
+          <span>📑 Tải Toàn Bộ Bài Chấm PDF</span>
+        </button>
+      </div>
+
+      <!-- Card: Chuyển đổi / Tạo đợt thi mới -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+        <div class="flex justify-between items-center">
+          <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Danh Sách Các Đợt Thi</h3>
+          <button onclick="toggleCreateExamForm()" class="text-[11px] text-amber-400 font-bold">+ Tạo đợt mới</button>
+        </div>
+
+        <!-- Form tạo đợt mới (ẩn/hiện) -->
+        <div id="formCreateExamMobile" class="hidden bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2 text-xs">
+          <div>
+            <label class="block text-slate-400 text-[10px] mb-0.5">Môn Học:</label>
+            <input type="text" id="mobInpSubject" value="Sinh học" class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white text-xs">
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-slate-400 text-[10px] mb-0.5">Kỳ Thi:</label>
+              <input type="text" id="mobInpPeriod" value="Giữa kỳ I" class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white text-xs">
+            </div>
+            <div>
+              <label class="block text-slate-400 text-[10px] mb-0.5">Lớp:</label>
+              <input type="text" id="mobInpClass" value="11A" class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white text-xs">
+            </div>
+          </div>
+          <button onclick="submitCreateExamMobile()" class="w-full py-1.5 bg-indigo-600 text-white font-bold rounded text-xs mt-1">Lưu & Kích Hoạt</button>
+        </div>
+
+        <div id="mobileExamsList" class="space-y-1.5 max-h-48 overflow-y-auto"></div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL XEM CHI TIẾT ẢNH BÀI CHẤM BÚT ĐỎ -->
+  <!-- ========================================================================= -->
+  <div id="imageViewerModal" class="fixed inset-0 z-50 bg-black/95 flex flex-col justify-between hidden">
+    <div class="p-3 bg-slate-900/80 backdrop-blur flex justify-between items-center z-10 border-b border-slate-800">
+      <div>
+        <h4 class="text-xs font-bold text-amber-400" id="viewerTitle">Bài làm</h4>
+        <p class="text-[10px] text-slate-400" id="viewerSubtitle">Chi tiết tem bút đỏ</p>
+      </div>
+      <button onclick="closeImageViewer()" class="px-3 py-1 bg-slate-800 text-white rounded-lg text-xs font-bold">Đóng ✕</button>
+    </div>
+    <div class="flex-1 overflow-auto flex items-center justify-center p-2">
+      <img id="viewerImage" src="" alt="Bài làm" class="max-w-full max-h-full object-contain rounded-lg shadow-2xl">
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- BOTTOM NAVIGATION BAR (CHO ĐIỆN THOẠI) -->
+  <!-- ========================================================================= -->
+  <nav class="w-full bg-slate-900/95 backdrop-blur border-t border-slate-800 flex justify-around items-center z-40 py-2 shrink-0">
+    <button onclick="switchTab('tabScanner')" id="navScanner" class="flex flex-col items-center gap-0.5 text-emerald-400 font-bold text-[10px]">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+      <span>Quét Bài</span>
+    </button>
+
+    <button onclick="switchTab('tabResults')" id="navResults" class="flex flex-col items-center gap-0.5 text-slate-400 font-semibold text-[10px]">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+      <span>Bảng Điểm</span>
+    </button>
+
+    <button onclick="switchTab('tabExam')" id="navExam" class="flex flex-col items-center gap-0.5 text-slate-400 font-semibold text-[10px]">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+      <span>Đề & Xuất File</span>
+    </button>
+  </nav>
+
+  <canvas id="analysisCanvas" class="hidden"></canvas>
+  <canvas id="captureCanvas" class="hidden"></canvas>
+
+  <script>
+    // =========================================================================
+    // KHỞI TẠO BIẾN TRẠNG THÁI TOÀN CỤC
+    // =========================================================================
+    let currentStream = null;
+    let videoTrack = null;
+    let facingMode = "environment";
+    let isGrading = false;
+    let lockFrames = 0;
+    let opticalInterval = null;
+    let deferredPrompt = null;
+    let latestSubId = null;
+
+    let sessionData = {
+      active_exam_id: null,
+      exam_info: null,
+      exam_data: null,
+      submissions: [],
+      all_exams: []
+    };
+
+    const RETICLES = [
+      { id: "reticle-tl", name: "Trên-Trái", matched: false },
+      { id: "reticle-tr", name: "Trên-Phải", matched: false },
+      { id: "reticle-bl", name: "Dưới-Trái", matched: false },
+      { id: "reticle-br", name: "Dưới-Phải", matched: false }
+    ];
+
+    // =========================================================================
+    // PWA & SERVICE WORKER REGISTRATION
+    // =========================================================================
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW Fail:', err));
+      });
+    }
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      const btn = document.getElementById("btnPwaInstall");
+      if (btn) btn.classList.remove("hidden");
+    });
+
+    function promptPwaInstall() {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(() => {
+          deferredPrompt = null;
+          document.getElementById("btnPwaInstall").classList.add("hidden");
+        });
+      } else {
+        alert("Để cài App:\n- Trên iPhone (Safari): Bấm nút Chia Sẻ (Share) -> Chọn 'Thêm vào MH chính'.\n- Trên Android: Bấm menu 3 chấm -> Chọn 'Cài đặt ứng dụng'.");
+      }
+    }
+
+    // =========================================================================
+    // KHỞI ĐỘNG ỨNG DỤNG
+    // =========================================================================
+    window.addEventListener("DOMContentLoaded", async () => {
+      await refreshSessionData();
+      await startCamera();
+      opticalInterval = setInterval(runOpticalMarkerDetection, 120);
+    });
+
+    // =========================================================================
+    // ĐIỀU HƯỚNG TABS
+    // =========================================================================
+    function switchTab(tabId) {
+      document.querySelectorAll(".tab-content").forEach(el => el.classList.remove("active"));
+      document.getElementById(tabId).classList.add("active");
+
+      // Cập nhật màu sắc nút thanh điều hướng
+      const navs = {
+        tabScanner: document.getElementById("navScanner"),
+        tabResults: document.getElementById("navResults"),
+        tabExam: document.getElementById("navExam")
+      };
+
+      Object.keys(navs).forEach(k => {
+        if (k === tabId) {
+          navs[k].className = "flex flex-col items-center gap-0.5 text-emerald-400 font-bold text-[10px]";
+        } else {
+          navs[k].className = "flex flex-col items-center gap-0.5 text-slate-400 font-semibold text-[10px]";
+        }
+      });
+
+      // Tối ưu tài nguyên camera khi rời khỏi tab quét
+      if (tabId === "tabScanner") {
+        if (!currentStream) startCamera();
+        if (!opticalInterval) opticalInterval = setInterval(runOpticalMarkerDetection, 120);
+      } else {
+        if (opticalInterval) { clearInterval(opticalInterval); opticalInterval = null; }
+        if (tabId === "tabResults") renderSubmissionsList();
+        if (tabId === "tabExam") renderExamsList();
+      }
+    }
+
+    // =========================================================================
+    // ĐỒNG BỘ DỮ LIỆU PHIÊN CHẤM
+    // =========================================================================
+    async function refreshSessionData() {
+      try {
+        const res = await fetch("/api/session");
+        sessionData = await res.json();
+        
+        const count = sessionData.submissions ? sessionData.submissions.length : 0;
+        document.getElementById("badgeSubCount").innerText = `${count} bài`;
+
+        if (sessionData.exam_info) {
+          const title = `${sessionData.exam_info.subject} - LỚP ${sessionData.exam_info.class_name}`;
+          document.getElementById("headerExamTitle").innerText = title;
+          document.getElementById("headerExamSubtitle").innerText = `Học kỳ: ${sessionData.exam_info.period}`;
+
+          document.getElementById("cardExamSubject").innerText = `${sessionData.exam_info.subject} (${sessionData.exam_info.class_name})`;
+          document.getElementById("cardExamDetails").innerText = `Kỳ thi: ${sessionData.exam_info.period} | Năm học: ${sessionData.exam_info.school_year}`;
+        }
+
+        const hasKeys = sessionData.exam_info && sessionData.exam_info.is_configured;
+        const statusBadge = document.getElementById("cardAnswerStatus");
+        if (hasKeys) {
+          statusBadge.innerText = "✓ Đã nạp đáp án";
+          statusBadge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800";
+        } else {
+          statusBadge.innerText = "Chưa có đáp án";
+          statusBadge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800";
+        }
+
+      } catch (err) {
+        console.error("Lỗi đồng bộ:", err);
+      }
+    }
+
+    // =========================================================================
+    // CAMERA & THUẬT TOÁN NHẬN DIỆN MỐC QUANG HỌC
+    // =========================================================================
+    async function startCamera() {
+      if (currentStream) currentStream.getTracks().forEach(t => t.stop());
+      try {
+        currentStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: facingMode }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          audio: false
+        });
+        const video = document.getElementById("videoElement");
+        video.srcObject = currentStream;
+        videoTrack = currentStream.getVideoTracks()[0];
+      } catch (err) {
+        alert("Lỗi Camera: " + err.message);
+      }
+    }
+
+    function switchCamera() {
+      facingMode = (facingMode === "environment") ? "user" : "environment";
+      startCamera();
+    }
+
+    async function toggleTorch() {
+      if (videoTrack && videoTrack.getCapabilities && videoTrack.getCapabilities().torch) {
+        const s = videoTrack.getSettings();
+        await videoTrack.applyConstraints({ advanced: [{ torch: !s.torch }] });
+      } else {
+        alert("Thiết bị không hỗ trợ bật đèn Flash.");
+      }
+    }
+
+    function runOpticalMarkerDetection() {
+      if (isGrading) return;
+      const video = document.getElementById("videoElement");
+      if (!video || video.readyState !== 4) return;
+
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      const cw = video.clientWidth;
+      const ch = video.clientHeight;
+      if (vw === 0 || vh === 0 || cw === 0 || ch === 0) return;
+
+      const scale = Math.max(cw / vw, ch / vh);
+      const offsetX = (cw - vw * scale) / 2;
+      const offsetY = (ch - vh * scale) / 2;
+
+      const canvas = document.getElementById("analysisCanvas");
+      canvas.width = 36;
+      canvas.height = 36;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+      let matchedCount = 0;
+
+      RETICLES.forEach((reticle) => {
+        const el = document.getElementById(reticle.id);
+        const rect = el.getBoundingClientRect();
+
+        const sampleW = Math.round((rect.width / scale) * 1.3);
+        const sampleH = Math.round((rect.height / scale) * 1.3);
+        const vidX = Math.round((rect.left + rect.width / 2 - offsetX) / scale);
+        const vidY = Math.round((rect.top + rect.height / 2 - offsetY) / scale);
+
+        const sx = Math.max(0, Math.min(vw - sampleW, vidX - sampleW / 2));
+        const sy = Math.max(0, Math.min(vh - sampleH, vidY - sampleH / 2));
+
+        ctx.drawImage(video, sx, sy, sampleW, sampleH, 0, 0, 36, 36);
+        const imgData = ctx.getImageData(0, 0, 36, 36).data;
+
+        let minLum = 255, maxLum = 0;
+        for (let i = 0; i < imgData.length; i += 4) {
+          const lum = 0.299 * imgData[i] + 0.587 * imgData[i + 1] + 0.114 * imgData[i + 2];
+          if (lum < minLum) minLum = lum;
+          if (lum > maxLum) maxLum = lum;
+        }
+
+        const contrast = maxLum - minLum;
+        const thresh = minLum + contrast * 0.45;
+        let darkPixels = 0;
+        for (let i = 0; i < imgData.length; i += 4) {
+          const lum = 0.299 * imgData[i] + 0.587 * imgData[i + 1] + 0.114 * imgData[i + 2];
+          if (lum <= thresh) darkPixels++;
+        }
+
+        const isMatched = (contrast >= 24.0 && darkPixels >= 18 && darkPixels <= 950);
+        reticle.matched = isMatched;
+
+        if (isMatched) {
+          el.classList.remove("reticle-red");
+          el.classList.add("reticle-green");
+          matchedCount++;
+        } else {
+          el.classList.remove("reticle-green");
+          el.classList.add("reticle-red");
+        }
+      });
+
+      updateGuidanceUI(matchedCount);
+    }
+
+    function updateGuidanceUI(matchedCount) {
+      const guideBox = document.getElementById("guidanceBox");
+      const guideText = document.getElementById("guideText");
+      const guideIcon = document.getElementById("guideIcon");
+      const viewfinder = document.getElementById("viewfinder");
+
+      const tl = RETICLES[0].matched;
+      const tr = RETICLES[1].matched;
+      const bl = RETICLES[2].matched;
+      const br = RETICLES[3].matched;
+
+      if (matchedCount === 4) {
+        viewfinder.className = "relative z-10 w-[86%] max-w-[340px] aspect-[1/1.414] border-2 border-emerald-400 rounded-2xl viewfinder-mask shadow-[0_0_25px_rgba(16,185,129,0.7)] transition-all flex flex-col justify-between p-2 pointer-events-none";
+        guideBox.className = "text-center text-xs font-bold text-emerald-200 bg-emerald-950/95 px-4 py-2 rounded-full mx-auto shadow-xl border border-emerald-500 animate-pulse flex items-center gap-1.5 pointer-events-auto";
+        guideIcon.innerText = "✓";
+        guideText.innerText = "ĐÃ KHÓA 4 GÓC! Đang chụp chấm...";
+
+        lockFrames++;
+        if (lockFrames >= 2) {
+          executeGradingProcess();
+        }
+        return;
+      }
+
+      lockFrames = 0;
+      viewfinder.className = "relative z-10 w-[86%] max-w-[340px] aspect-[1/1.414] border-2 border-red-500/70 rounded-2xl viewfinder-mask transition-all flex flex-col justify-between p-2 pointer-events-none";
+      guideBox.className = "text-center text-xs font-bold text-amber-300 bg-black/85 px-4 py-2 rounded-full mx-auto shadow-xl border border-amber-500/50 transition-all flex items-center gap-1.5 pointer-events-auto";
+
+      if (tl && bl && !tr && !br) {
+        guideIcon.innerText = "➔";
+        guideText.innerText = "Dịch camera sang PHẢI một chút";
+      } else if (tr && br && !tl && !bl) {
+        guideIcon.innerText = "⬅";
+        guideText.innerText = "Dịch camera sang TRÁI một chút";
+      } else if (tl && tr && !bl && !br) {
+        guideIcon.innerText = "⬇";
+        guideText.innerText = "Dịch camera XUỐNG DƯỚI";
+      } else if (bl && br && !tl && !tr) {
+        guideIcon.innerText = "⬆";
+        guideText.innerText = "Dịch camera LÊN TRÊN";
+      } else if (matchedCount === 1) {
+        guideIcon.innerText = "📐";
+        guideText.innerText = "Cầm máy SONG SONG với mặt bàn";
+      } else if (matchedCount === 0) {
+        guideIcon.innerText = "🔍";
+        guideText.innerText = "Đưa 4 góc bài thi vào 4 ô vuông ngắm";
+      } else {
+        guideIcon.innerText = "⚡";
+        guideText.innerText = `Đã khớp ${matchedCount}/4. Bấm nút tròn để chụp ngay!`;
+      }
+    }
+
+    function triggerManualCapture() {
+      if (!isGrading) executeGradingProcess();
+    }
+
+    // =========================================================================
+    // GỬI ẢNH LÊN MÁY CHỦ CHẤM THI
+    // =========================================================================
+    async function executeGradingProcess() {
+      isGrading = true;
+      if (navigator.vibrate) navigator.vibrate(80);
+
+      const guideText = document.getElementById("guideText");
+      const guideIcon = document.getElementById("guideIcon");
+      guideIcon.innerText = "⏳";
+      guideText.innerText = "Đang kiểm định & chấm bài...";
+
+      const video = document.getElementById("videoElement");
+      const canvas = document.getElementById("captureCanvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext("2d").drawImage(video, 0, 0);
+
+      canvas.toBlob(async (blob) => {
+        const fd = new FormData();
+        fd.append("file", blob, `Mobile_${Date.now()}.jpg`);
+
+        try {
+          const res = await fetch("/api/grade-single-file", { method: "POST", body: fd });
+          const data = await res.json();
+          if (data.new_submissions && data.new_submissions.length > 0) {
+            const sub = data.new_submissions[0];
+            if (sub.has_error) {
+              if (navigator.vibrate) navigator.vibrate([100, 80, 100]);
+              alert(sub.error_msg || "Ảnh chụp không đạt yêu cầu. Vui lòng giữ máy thẳng và đủ sáng.");
+            } else {
+              if (navigator.vibrate) navigator.vibrate([60, 40, 120]);
+              showResultToast(sub);
+              await refreshSessionData();
+            }
+          }
+        } catch (err) {
+          alert("Lỗi kết nối máy chủ: " + err.message);
+        } finally {
+          isGrading = false;
+          lockFrames = 0;
+        }
+      }, "image/jpeg", 0.92);
+    }
+
+    function showResultToast(sub) {
+      latestSubId = sub.submission_id;
+      document.getElementById("toastTotalScore").innerText = sub.scores ? sub.scores.total : "0.0";
+      document.getElementById("toastSbd").innerText = sub.sbd || "---";
+      document.getElementById("toastExamCode").innerText = sub.exam_code || "---";
+      
+      const s = sub.scores || {};
+      document.getElementById("toastBreakdown").innerText = `P1: ${s.p1 || 0} | P2: ${s.p2 || 0} | P3: ${s.p3 || 0}`;
+
+      const drawer = document.getElementById("recentResultDrawer");
+      drawer.classList.remove("hidden");
+    }
+
+    function closeResultToast() {
+      document.getElementById("recentResultDrawer").classList.add("hidden");
+    }
+
+    function viewLatestGradedImage() {
+      if (latestSubId) {
+        openImageViewer(latestSubId, `SBD: ${document.getElementById("toastSbd").innerText}`);
+      }
+    }
+
+    // =========================================================================
+    // HIỂN THỊ DANH SÁCH BÀI LÀM (TAB 2)
+    // =========================================================================
+    function renderSubmissionsList() {
+      const container = document.getElementById("resultsListContainer");
+      const subs = sessionData.submissions || [];
+      const query = (document.getElementById("searchSbdInput").value || "").trim().toLowerCase();
+
+      const filtered = subs.filter(s => {
+        const sbd = (s.sbd || "").toLowerCase();
+        const code = (s.exam_code || "").toLowerCase();
+        return !query || sbd.includes(query) || code.includes(query);
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="text-center text-slate-500 py-16 text-xs">
+            ${query ? "Không tìm thấy bài thi khớp số báo danh này." : "Chưa có bài thi nào được chấm trong đợt này."}
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filtered.map(sub => {
+        const isErr = sub.has_error;
+        const total = sub.scores ? sub.scores.total : 0.0;
+        return `
+          <div onclick="openImageViewer('${sub.submission_id}', 'SBD: ${sub.sbd} - Đề: ${sub.exam_code}')" class="bg-slate-900 border border-slate-800 rounded-xl p-3 flex justify-between items-center active:scale-[0.99] transition">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 ${isErr ? 'bg-rose-950 border-rose-800 text-rose-300' : 'bg-indigo-950 border-indigo-800 text-emerald-400'} border rounded-xl flex items-center justify-center font-black text-sm">
+                ${isErr ? '!' : total}
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold text-white">SBD: ${sub.sbd || 'Chưa rõ'}</span>
+                  <span class="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.2 rounded font-mono">Đề: ${sub.exam_code || '---'}</span>
+                </div>
+                <p class="text-[10px] text-slate-400 mt-0.5 truncate max-w-[180px]">
+                  ${isErr ? (sub.error_msg || 'Lỗi nhận diện') : `P1: ${sub.scores.p1} | P2: ${sub.scores.p2} | P3: ${sub.scores.p3}`}
+                </p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2" onclick="event.stopPropagation()">
+              <button onclick="deleteSubmissionMobile('${sub.submission_id}')" class="p-1.5 text-slate-500 hover:text-rose-400 text-xs">
+                🗑️
+              </button>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function refreshSubmissions() {
+      await refreshSessionData();
+      renderSubmissionsList();
+    }
+
+    async function deleteSubmissionMobile(subId) {
+      if (!confirm("Bạn có chắc chắn muốn xóa bài thi này?")) return;
+      try {
+        const res = await fetch(`/api/delete-submission/${subId}`, { method: "DELETE" });
+        if (res.ok) {
+          await refreshSessionData();
+          renderSubmissionsList();
+        }
+      } catch (e) {
+        alert("Lỗi khi xóa bài: " + e.message);
+      }
+    }
+
+    // =========================================================================
+    // XEM ẢNH BÀI CHẤM TOÀN MÀN HÌNH
+    // =========================================================================
+    function openImageViewer(subId, title) {
+      document.getElementById("viewerTitle").innerText = title;
+      document.getElementById("viewerSubtitle").innerText = `Mã bài: ${subId}`;
+      document.getElementById("viewerImage").src = `/api/image/${subId}?t=${Date.now()}`;
+      document.getElementById("imageViewerModal").classList.remove("hidden");
+    }
+
+    function closeImageViewer() {
+      document.getElementById("imageViewerModal").classList.add("hidden");
+    }
+
+    // =========================================================================
+    // QUẢN LÝ ĐỢT THI & NẠP ĐÁP ÁN (TAB 3)
+    // =========================================================================
+    function renderExamsList() {
+      const container = document.getElementById("mobileExamsList");
+      const allExams = sessionData.all_exams || [];
+      const activeId = sessionData.active_exam_id;
+
+      container.innerHTML = allExams.map(ex => {
+        const isActive = (ex.id === activeId);
+        return `
+          <div onclick="selectExamMobile('${ex.id}')" class="p-2.5 rounded-xl border ${isActive ? 'bg-indigo-950/70 border-indigo-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-300'} flex justify-between items-center text-xs">
+            <div>
+              <span class="font-bold">${ex.title}</span>
+              <p class="text-[9px] text-slate-400">Đã chấm: ${ex.submission_count} bài</p>
+            </div>
+            ${isActive ? '<span class="text-[9px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-bold">Đang chọn</span>' : ''}
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function selectExamMobile(examId) {
+      try {
+        const res = await fetch(`/api/select-exam/${examId}`, { method: "POST" });
+        if (res.ok) {
+          await refreshSessionData();
+          renderExamsList();
+          alert("Đã chuyển sang đợt thi đã chọn.");
+        }
+      } catch (e) {
+        alert("Lỗi chuyển đợt thi: " + e.message);
+      }
+    }
+
+    function toggleCreateExamForm() {
+      const form = document.getElementById("formCreateExamMobile");
+      form.classList.toggle("hidden");
+    }
+
+    async function submitCreateExamMobile() {
+      const subject = document.getElementById("mobInpSubject").value.trim();
+      const period = document.getElementById("mobInpPeriod").value.trim();
+      const className = document.getElementById("mobInpClass").value.trim();
+
+      if (!subject || !period || !className) {
+        alert("Vui lòng điền đủ Môn học, Kỳ thi và Lớp.");
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/create-exam", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subject: subject,
+            period: period,
+            class_name: className,
+            school_year: "2026-2027"
+          })
+        });
+        if (res.ok) {
+          toggleCreateExamForm();
+          await refreshSessionData();
+          renderExamsList();
+          alert("Khởi tạo đợt thi mới thành công!");
+        }
+      } catch (e) {
+        alert("Lỗi khởi tạo đợt thi: " + e.message);
+      }
+    }
+
+    async function uploadAnswerKeyMobile(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const fd = new FormData();
+      fd.append("file", file);
+
+      try {
+        const res = await fetch("/api/upload-answer-key", { method: "POST", body: fd });
+        const data = await res.json();
+        if (data.status === "SUCCESS") {
+          alert(`✓ Nạp đáp án thành công!\nĐã nạp ${data.exam_codes.length} mã đề thi.`);
+          await refreshSessionData();
+        } else {
+          alert("Lỗi nạp đáp án: " + (data.detail || "Không rõ nguyên nhân"));
+        }
+      } catch (err) {
+        alert("Lỗi kết nối khi nạp đáp án: " + err.message);
+      }
+    }
+
+    // =========================================================================
+    // XUẤT FILE EXCEL & PDF TẢI VỀ HOẶC CHIA SẺ TRỰC TIẾP TỪ ĐIỆN THOẠI
+    // =========================================================================
+    async function exportExcelMobile() {
+      const subs = sessionData.submissions || [];
+      if (subs.length === 0) {
+        alert("Chưa có bài thi nào được chấm để xuất bảng điểm.");
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/export-excel");
+        if (!res.ok) throw new Error("Máy chủ báo lỗi khi tạo file Excel.");
+        
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `BANG_DIEM_${Date.now()}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } catch (err) {
+        alert("Lỗi xuất Excel: " + err.message);
+      }
+    }
+
+    async function exportPdfMobile() {
+      const subs = sessionData.submissions || [];
+      if (subs.length === 0) {
+        alert("Chưa có bài thi nào được chấm để xuất PDF.");
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/export-pdf");
+        if (!res.ok) throw new Error("Máy chủ báo lỗi khi tạo file PDF.");
+
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `TAP_BAI_CHAM_${Date.now()}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } catch (err) {
+        alert("Lỗi xuất PDF: " + err.message);
+      }
+    }
+  </script>
+</body>
+</html>
