@@ -24,7 +24,7 @@
     }
     .viewfinder-mask { box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.70); }
     
-    /* Khung ngắm góc quang học kiểu bracket mở (rộng 54px, không che mốc đen) */
+    /* Khung ngắm góc quang học kiểu bracket mở (rộng 54px, tâm trong suốt không che mốc đen) */
     .target-corner {
       position: absolute;
       width: 54px;
@@ -94,7 +94,7 @@
   <!-- ========================================================================= -->
   <!-- TOP HEADER (DÙNG CHUNG) -->
   <!-- ========================================================================= -->
-  <header class="w-full px-4 py-2.5 bg-slate-900/95 backdrop-blur z-30 flex justify-between items-center shrink-0 border-b border-slate-800">
+  <header class="w-full px-4 py-2 bg-slate-900/95 backdrop-blur z-30 flex justify-between items-center shrink-0 border-b border-slate-800">
     <div class="flex items-center gap-2">
       <div class="w-7 h-7 bg-amber-500 text-slate-950 font-black rounded-lg flex items-center justify-center text-xs tracking-wider shadow">
         OMR
@@ -103,7 +103,10 @@
         <h1 class="text-xs font-bold text-amber-400 uppercase tracking-wide truncate max-w-[170px]" id="headerExamTitle">
           ĐANG TẢI...
         </h1>
-        <p class="text-[10px] text-slate-400" id="headerExamSubtitle">Đợt kiểm tra hiện tại</p>
+        <p class="text-[10px] text-slate-400 flex items-center gap-1" id="headerExamSubtitle">
+          <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" id="serverStatusDot"></span>
+          <span id="serverStatusText">Đang kết nối máy chủ...</span>
+        </p>
       </div>
     </div>
 
@@ -136,7 +139,7 @@
           <span>Quét và chấm liên tục</span>
         </div>
         <p id="guideText" class="text-[11px] text-slate-300 mt-0.5 leading-tight">
-          Căn 4 mốc đen góc vào 4 khung ngắm. Giữ chắc tay để tự chụp hoặc bấm 'Chụp và chấm ngay'.
+          Căn 4 mốc đen góc vào 4 khung ngắm. Đủ 4 mốc máy sẽ tự chụp.
         </p>
       </div>
 
@@ -371,11 +374,12 @@
     let facingMode = "environment";
     let isGrading = false;
     let opticalInterval = null;
-    let threeCornerFrames = 0;
+    let lock4Frames = 0;
     let deferredPrompt = null;
     let latestSubId = null;
     let isTorchOn = false;
     let toastTimer = null;
+    let sessionRetryTimer = null;
 
     let sessionData = {
       active_exam_id: null,
@@ -484,12 +488,17 @@
     }
 
     // =========================================================================
-    // KHỞI ĐỘNG ỨNG DỤNG
+    // KHỞI ĐỘNG ỨNG DỤNG (BẬT CAMERA NGAY LẬP TỨC TRONG 200MS, KHÔNG CHỜ SERVER)
     // =========================================================================
-    window.addEventListener("DOMContentLoaded", async () => {
-      await refreshSessionData();
-      await startCamera();
-      opticalInterval = setInterval(runOpticalMarkerDetection, 80);
+    window.addEventListener("DOMContentLoaded", () => {
+      // 1. Mở Camera tức thì, không bị chặn bởi mạng
+      startCamera();
+
+      // 2. Tải dữ liệu đợt thi ngầm với cơ chế tự động thử lại khi máy chủ Render khởi động
+      fetchSessionWithRetry();
+
+      // 3. Khởi động vòng lặp kiểm tra mốc quang học 90ms/chu kỳ
+      opticalInterval = setInterval(runOpticalMarkerDetection, 90);
 
       // Chạm màn hình để bật video nếu bị chặn autoplay
       document.body.addEventListener("click", () => {
@@ -523,7 +532,7 @@
 
       if (tabId === "tabScanner") {
         if (!currentStream) startCamera();
-        if (!opticalInterval) opticalInterval = setInterval(runOpticalMarkerDetection, 80);
+        if (!opticalInterval) opticalInterval = setInterval(runOpticalMarkerDetection, 90);
       } else {
         if (opticalInterval) { clearInterval(opticalInterval); opticalInterval = null; }
         if (tabId === "tabResults") renderSubmissionsList();
@@ -532,11 +541,16 @@
     }
 
     // =========================================================================
-    // ĐỒNG BỘ DỮ LIỆU PHIÊN CHẤM
+    // ĐỒNG BỘ DỮ LIỆU PHIÊN CHẤM VỚI CƠ CHẾ AUTO-RETRY KHI SERVER COLD-START
     // =========================================================================
-    async function refreshSessionData() {
+    async function fetchSessionWithRetry() {
+      const dot = document.getElementById("serverStatusDot");
+      const statusText = document.getElementById("serverStatusText");
+
       try {
         const res = await fetch("/api/session");
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        
         sessionData = await res.json();
         
         const count = sessionData.submissions ? sessionData.submissions.length : 0;
@@ -561,13 +575,24 @@
           statusBadge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800";
         }
 
+        if (sessionRetryTimer) {
+          clearTimeout(sessionRetryTimer);
+          sessionRetryTimer = null;
+        }
+
       } catch (err) {
-        console.error("Lỗi đồng bộ:", err);
+        if (dot) dot.className = "w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping";
+        if (statusText) statusText.innerText = "Đang kết nối lại máy chủ...";
+        sessionRetryTimer = setTimeout(fetchSessionWithRetry, 3500);
       }
     }
 
+    async function refreshSessionData() {
+      await fetchSessionWithRetry();
+    }
+
     // =========================================================================
-    // CAMERA & NHẬN DIỆN MỐC QUANG HỌC THÔNG MINH
+    // CAMERA & NHẬN DIỆN MỐC QUANG HỌC CHUẨN XÁC
     // =========================================================================
     async function startCamera() {
       if (currentStream) {
@@ -646,17 +671,18 @@
       }
     }
 
-    // Thuật toán quang học quét mốc đen thông minh (độ nhạy cao, bất chấp auto-exposure camera)
+    // Thuật toán quang học quét mốc đen chuẩn xác (chỉ nhận diện trên nền giấy trắng, chống bắt nhầm màn hình đen)
     function runOpticalMarkerDetection() {
       if (isGrading) return;
       const video = document.getElementById("videoElement");
-      if (!video || video.readyState < 2 || video.paused) return;
+      // BẮT BUỘC: Video phải sẵn sàng, không bị tạm dừng và kích thước video > 0
+      if (!video || video.readyState < 2 || video.paused || video.videoWidth === 0 || video.videoHeight === 0) return;
 
       const vw = video.videoWidth;
       const vh = video.videoHeight;
       const cw = video.clientWidth;
       const ch = video.clientHeight;
-      if (vw === 0 || vh === 0 || cw === 0 || ch === 0) return;
+      if (cw === 0 || ch === 0) return;
 
       const scale = Math.max(cw / vw, ch / vh);
       const offsetX = (cw - vw * scale) / 2;
@@ -673,9 +699,8 @@
         const el = document.getElementById(reticle.id);
         const rect = el.getBoundingClientRect();
 
-        // Mở rộng vùng quét lên 1.55 lần để bắt mốc đen nhạy bén kể cả khi lệch nhẹ
-        const sampleW = Math.round((rect.width / scale) * 1.55);
-        const sampleH = Math.round((rect.height / scale) * 1.55);
+        const sampleW = Math.round((rect.width / scale) * 1.5);
+        const sampleH = Math.round((rect.height / scale) * 1.5);
         const vidX = Math.round((rect.left + rect.width / 2 - offsetX) / scale);
         const vidY = Math.round((rect.top + rect.height / 2 - offsetY) / scale);
 
@@ -702,11 +727,12 @@
 
         const darkRatio = darkPixels / (36 * 36);
 
-        // ĐIỀU KIỆN NHẬN DIỆN MỐC THÔNG MINH:
-        // 1. Tương phản cục bộ contrast >= 22 (phân biệt nền giấy và mốc đen)
-        // 2. Điểm đen đậm hơn ít nhất 18% so với nền giấy (minLum < maxLum * 0.82)
-        // 3. Tỷ lệ diện tích đốm đen chiếm từ 2.0% đến 50% vùng ngắm
-        const isMatched = (contrast >= 22.0 && minLum < maxLum * 0.82 && darkRatio >= 0.02 && darkRatio <= 0.50);
+        // ĐIỀU KIỆN MỐC ĐEN CHÍNH XÁC:
+        // 1. maxLum >= 115: BẮT BUỘC có giấy trắng! Tuyệt đối không nhận diện trên màn hình đen hoặc bóng tối!
+        // 2. contrast >= 25.0: Đủ độ tương phản giữa mốc đen và giấy trắng.
+        // 3. minLum < maxLum * 0.78: Mốc đen tối hơn nền giấy ít nhất 22%.
+        // 4. darkRatio từ 2.5% đến 45% diện tích vùng ngắm.
+        const isMatched = (maxLum >= 115 && contrast >= 25.0 && minLum < maxLum * 0.78 && darkRatio >= 0.025 && darkRatio <= 0.45);
         reticle.matched = isMatched;
 
         if (isMatched) {
@@ -723,49 +749,51 @@
     }
 
     function updateGuidanceUI(matchedCount) {
+      if (isGrading) return;
+
       const guideBox = document.getElementById("guidanceBox");
       const guideBoxText = document.getElementById("guideBoxText");
       const guideIcon = document.getElementById("guideIcon");
       const guideSubText = document.getElementById("guideText");
       const viewfinder = document.getElementById("viewfinder");
 
-      // KHI NHẬN ĐỦ 4 GÓC: TỰ ĐỘNG CHỤP VÀ CHẤM ĐIỂM NGAY LẬP TỨC!
+      // CHỈ TỰ ĐỘNG CHỤP KHI ĐÃ NHẬN ĐỦ 4 GÓC (matchedCount === 4) VÀ GIỮ VỮNG TAY 2 CHU KỲ (~180ms)
       if (matchedCount === 4) {
+        lock4Frames++;
         viewfinder.className = "relative w-[88%] max-w-[330px] aspect-[1/1.444] border-2 border-emerald-400 rounded-2xl viewfinder-mask shadow-[0_0_28px_rgba(16,185,129,0.9)] transition-all flex flex-col justify-between p-1";
         guideBox.className = "text-center text-[11px] font-bold text-emerald-200 bg-emerald-950/95 px-4 py-1.5 rounded-full mx-auto shadow-xl border border-emerald-500 animate-pulse flex items-center gap-1.5 pointer-events-auto";
         guideIcon.innerText = "✓";
-        guideBoxText.innerText = "ĐÃ KHÓA 4 MỐC! ĐANG TỰ ĐỘNG CHẤM...";
-        guideSubText.innerText = "Đã khớp 4 góc chuẩn xác! Hệ thống đang tự động chụp và chấm bài...";
+        guideBoxText.innerText = "ĐÃ KHÓA ĐỦ 4 MỐC! ĐANG CHỤP...";
+        guideSubText.innerText = "Giữ chắc tay, hệ thống đang tự động chụp và chấm bài...";
 
-        if (!isGrading) {
+        if (lock4Frames >= 2) {
           executeGradingProcess();
         }
         return;
       }
 
-      // NẾU KHỚP 3/4 MỐC TRONG 2 CHU KỲ LIÊN TIẾP: TỰ ĐỘNG CHỤP VÌ BACKEND ĐÃ CÓ THUẬT TOÁN TỰ NẮN 4 GÓC!
-      if (matchedCount === 3) {
-        threeCornerFrames++;
-        if (threeCornerFrames >= 2 && !isGrading) {
-          guideBoxText.innerText = "ĐÃ KHÓA 3/4 MỐC! ĐANG TỰ ĐỘNG CHẤM...";
-          executeGradingProcess();
-          return;
-        }
-      } else {
-        threeCornerFrames = 0;
-      }
+      // NẾU CHƯA ĐỦ 4 GÓC: RESET BỘ ĐẾM, TUYỆT ĐỐI KHÔNG TỰ ĐỘNG CHỤP!
+      lock4Frames = 0;
 
       viewfinder.className = "relative w-[88%] max-w-[330px] aspect-[1/1.444] border-2 border-dashed border-emerald-400/70 rounded-2xl viewfinder-mask transition-all flex flex-col justify-between p-1";
       guideBox.className = "text-center text-[11px] font-bold text-amber-300 bg-black/85 px-3 py-1.5 rounded-full mx-auto shadow-xl border border-amber-500/50 transition-all flex items-center gap-1.5 pointer-events-auto";
 
-      if (matchedCount >= 2) {
-        guideIcon.innerText = "⚡";
-        guideBoxText.innerText = `Đã khớp ${matchedCount}/4 mốc. Bấm 'Chụp' hoặc giữ yên!`;
-        guideSubText.innerText = "Giữ chắc tay để máy tự chụp, hoặc bấm nút 'Chụp và chấm ngay' bên dưới.";
+      if (matchedCount === 3) {
+        guideIcon.innerText = "🔍";
+        guideBoxText.innerText = "Đã khớp 3/4 mốc. Căn nốt mốc còn lại!";
+        guideSubText.innerText = "Đã tìm thấy 3 mốc. Đưa nốt góc mốc thứ 4 vào ngàm hoặc bấm 'Chụp và chấm ngay'!";
+      } else if (matchedCount === 2) {
+        guideIcon.innerText = "📐";
+        guideBoxText.innerText = "Đã khớp 2/4 mốc. Giữ phẳng camera!";
+        guideSubText.innerText = "Cầm điện thoại song song mặt bàn để khớp cả 4 mốc.";
+      } else if (matchedCount === 1) {
+        guideIcon.innerText = "🎯";
+        guideBoxText.innerText = "Đã khớp 1/4 mốc. Đưa gần hơn!";
+        guideSubText.innerText = "Căn chỉnh 4 mốc đen góc vào 4 khung ngắm.";
       } else {
         guideIcon.innerText = "🎯";
         guideBoxText.innerText = "Đưa 4 góc mốc đen vào khung";
-        guideSubText.innerText = "Căn 4 mốc đen góc vào 4 khung ngắm. Giữ chắc tay để tự chụp hoặc bấm nút chụp.";
+        guideSubText.innerText = "Căn 4 mốc đen góc vào 4 khung ngắm. Đủ 4 mốc máy sẽ tự chụp.";
       }
     }
 
@@ -781,12 +809,15 @@
       isGrading = true;
       if (navigator.vibrate) navigator.vibrate(60);
 
+      const guideBox = document.getElementById("guidanceBox");
       const guideBoxText = document.getElementById("guideBoxText");
       const guideIcon = document.getElementById("guideIcon");
       const guideSubText = document.getElementById("guideText");
+      
       guideIcon.innerText = "⏳";
       guideBoxText.innerText = "Đang nắn phẳng & chấm điểm...";
       guideSubText.innerText = "Hệ thống đang đối chiếu đáp án với mã đề bài thi...";
+      guideBox.className = "text-center text-[11px] font-bold text-amber-200 bg-amber-950/95 px-4 py-1.5 rounded-full mx-auto shadow-xl border border-amber-500 animate-pulse flex items-center gap-1.5 pointer-events-auto";
 
       const video = document.getElementById("videoElement");
       const canvas = document.getElementById("captureCanvas");
@@ -797,6 +828,7 @@
       canvas.toBlob(async (blob) => {
         if (!blob) {
           isGrading = false;
+          resetGuidanceHUD();
           return;
         }
         await postGradeImageBlob(blob, `Mobile_${Date.now()}.jpg`);
@@ -844,13 +876,12 @@
           if (sub.has_error) {
             playBeep(false);
             if (navigator.vibrate) navigator.vibrate([100, 60, 100]);
-            showNotificationToast(sub.error_msg || "Ảnh chụp không đạt yêu cầu. Vui lòng chụp thẳng và đủ sáng.", true);
+            showNotificationToast(sub.error_msg || "Ảnh chụp không đạt chuẩn. Vui lòng chụp thẳng và đủ sáng.", true);
           } else {
             playBeep(true);
             if (navigator.vibrate) navigator.vibrate([60, 40, 120]);
             showResultToast(sub);
             await refreshSessionData();
-            // Tự động làm mới danh sách bài chấm ở Tab 2
             renderSubmissionsList();
           }
         }
@@ -859,7 +890,21 @@
         showNotificationToast("Lỗi kết nối máy chủ: " + err.message, true);
       } finally {
         isGrading = false;
-        threeCornerFrames = 0;
+        lock4Frames = 0;
+        resetGuidanceHUD();
+      }
+    }
+
+    function resetGuidanceHUD() {
+      const guideBox = document.getElementById("guidanceBox");
+      const guideBoxText = document.getElementById("guideBoxText");
+      const guideIcon = document.getElementById("guideIcon");
+      const guideSubText = document.getElementById("guideText");
+      if (guideBox && guideBoxText && guideIcon && guideSubText) {
+        guideIcon.innerText = "🎯";
+        guideBoxText.innerText = "Đưa 4 góc mốc đen vào khung";
+        guideSubText.innerText = "Căn 4 mốc đen góc vào 4 khung ngắm. Đủ 4 mốc máy sẽ tự chụp.";
+        guideBox.className = "text-center text-[11px] font-bold text-amber-300 bg-black/85 px-3 py-1.5 rounded-full mx-auto shadow-xl border border-amber-500/50 transition-all flex items-center gap-1.5 pointer-events-auto";
       }
     }
 
@@ -983,7 +1028,6 @@
       };
 
       img.onerror = () => {
-        // Nếu /api/graded-image/ gặp lỗi thì tự thử fallback sang /api/image/
         if (!img.src.includes("/api/image/")) {
           img.src = `/api/image/${subId}?t=${Date.now()}`;
         } else {
