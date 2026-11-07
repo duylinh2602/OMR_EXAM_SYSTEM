@@ -54,20 +54,30 @@ Bạn có thể chọn **1 trong 2 nền tảng miễn phí 100%** dưới đây
 - **Cấu hình:** 2 vCPU, 16GB RAM (chấm ảnh siêu nhanh, không bao giờ lo tràn bộ nhớ).
 - **Tên miền:** Cấp sẵn link HTTPS miễn phí vĩnh viễn.
 
-**Các bước thực hiện:**
+**Các bước thực hiện chi tiết:**
 1. Tạo tài khoản miễn phí tại: [https://huggingface.co](https://huggingface.co).
 2. Bấm vào ảnh đại diện góc trên phải $\rightarrow$ Chọn **New Space**.
 3. Điền thông tin:
-   - **Space name:** `omr-scanner`
+   - **Space name:** `cham_trac_nghiem` (hoặc tên tùy thích)
    - **License:** Apache 2.0 (hoặc MIT)
    - **Select the Space SDK:** Chọn **Docker** $\rightarrow$ Chọn **Blank**.
    - **Space Hardware:** Chọn **CPU Basic (Free - 2 vCPU, 16GB RAM)**.
-4. Clone repo của Space về máy tính hoặc đẩy trực tiếp toàn bộ source code của thư mục này lên Space qua Git:
-   ```bash
-   git remote add space https://huggingface.co/spaces/<username>/omr-scanner
-   git push space main
-   ```
-5. Hugging Face sẽ tự động build `Dockerfile` và khởi chạy trên cổng `7860`. Bạn đã có ngay link web app dùng trọn đời.
+4. **Đẩy toàn bộ mã nguồn lên Space qua Git:**
+   - **Bước 4.1: Tạo Access Token trên Hugging Face** (Bắt buộc để Git xác thực quyền đẩy code):
+     - Vào link: [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
+     - Bấm **Create new token** $\rightarrow$ Đặt tên token (ví dụ: `omr-upload`) $\rightarrow$ Chọn quyền **Write** $\rightarrow$ Bấm **Create token** và sao chép mã (dạng `hf_...`).
+   - **Bước 4.2: Chạy lệnh đẩy code trong Terminal:**
+     ```bash
+     git remote set-url space https://<username>:<ACCESS_TOKEN>@huggingface.co/spaces/<username>/cham_trac_nghiem
+     git push -f space main
+     ```
+5. **Kiểm tra tiến trình và lấy link sử dụng trên điện thoại:**
+   - Sau khi lệnh push chạy xong, quay lại trang Space của bạn. Bạn sẽ thấy trạng thái chuyển sang **Building** (mất khoảng 2-3 phút để cài đặt OpenCV & FastAPI).
+   - Khi hoàn tất, trạng thái chuyển sang **Running** màu xanh lá.
+   - **Đường link dùng trên điện thoại (Direct URL):**
+     `https://<username>-cham-trac-nghiem.hf.space/scanner`
+     (Ví dụ: `https://duylinh2602-cham-trac-nghiem.hf.space/scanner`).
+     Mở link này trên điện thoại để quét và chấm bài vĩnh viễn.
 
 ---
 
