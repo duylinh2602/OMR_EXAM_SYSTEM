@@ -9812,161 +9812,125 @@
         },
         "cf520223": {
           "file_name": "1213.jpg",
-          "sbd": "999??[94]99",
-          "exam_code": "CHƯA RÕ",
-          "raw_exam_code": "????",
+          "sbd": "??0??012",
+          "exam_code": "0501",
+          "raw_exam_code": "0501",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 6 tô đúp (9 và 4)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng (999??[94]99)"
-            },
-            {
-              "type": "INVALID_EXAM_CODE",
-              "msg": "Mã đề thi chưa rõ ràng hoặc tô lỗi (????)"
-            },
-            {
-              "type": "P1_DOUBLE_FILL",
-              "msg": "Phần I Câu 3 tô đúp (D và C)"
-            },
-            {
-              "type": "P1_DOUBLE_FILL",
-              "msg": "Phần I Câu 13 tô đúp (C và A)"
-            },
-            {
-              "type": "P1_DOUBLE_FILL",
-              "msg": "Phần I Câu 15 tô đúp (C và D)"
-            },
-            {
-              "type": "P3_Q1_VIOLATION",
-              "msg": "Phần III Câu 1 phạm quy chế: Cột 1 tô đúp (5, 8)"
-            },
-            {
-              "type": "P3_Q2_VIOLATION",
-              "msg": "Phần III Câu 2 phạm quy chế: Cột 4 tô đúp (0, 1, 2, 3, 5, 6); Cột 4 bị bỏ cách quãng"
-            },
-            {
-              "type": "P3_Q4_VIOLATION",
-              "msg": "Phần III Câu 4 phạm quy chế: Cột 2 tô đúp (1, 7)"
+              "msg": "Số báo danh chưa rõ ràng (??0??012)"
             }
           ],
           "scores": {
-            "status": "UNKNOWN_CODE",
-            "p1": 0.0,
-            "p2": 0.0,
-            "p3": 0.0,
-            "total": 0.0
+            "status": "NEEDS_REVIEW",
+            "p1": 4.0,
+            "p2": 2.0,
+            "p3": 1.0,
+            "total": 7.0
           },
           "details": {
             "part1": {
-              "1": "",
-              "2": "",
-              "3": "MULTIPLE",
-              "4": "A",
-              "5": "C",
-              "6": "",
-              "7": "",
-              "8": "",
-              "9": "",
-              "10": "",
-              "11": "",
-              "12": "",
-              "13": "MULTIPLE",
-              "14": "A",
-              "15": "MULTIPLE",
-              "16": ""
+              "1": "B",
+              "2": "D",
+              "3": "A",
+              "4": "D",
+              "5": "B",
+              "6": "A",
+              "7": "B",
+              "8": "C",
+              "9": "D",
+              "10": "D",
+              "11": "A",
+              "12": "A",
+              "13": "A",
+              "14": "C",
+              "15": "A",
+              "16": "A"
             },
             "part2": {
               "1": {
-                "a": "",
-                "b": "",
-                "c": "",
-                "d": ""
+                "a": "Đ",
+                "b": "Đ",
+                "c": "Đ",
+                "d": "S"
               },
               "2": {
-                "a": "",
-                "b": "",
-                "c": "",
-                "d": ""
+                "a": "S",
+                "b": "S",
+                "c": "Đ",
+                "d": "Đ"
               }
             },
             "part3": {
               "1": {
-                "raw_string": "[58]8__",
-                "normalized_value": null,
-                "is_valid": false,
-                "anomalies": [
-                  "Cột 1 tô đúp (5, 8)"
-                ],
+                "raw_string": "6___",
+                "normalized_value": 6.0,
+                "is_valid": true,
+                "anomalies": [],
                 "digits": [
                   [
-                    "5",
-                    "8"
+                    "6"
                   ],
-                  [
-                    "8"
-                  ],
+                  [],
                   [],
                   []
                 ]
               },
               "2": {
-                "raw_string": "_8_[012356]",
-                "normalized_value": null,
-                "is_valid": false,
-                "anomalies": [
-                  "Cột 4 tô đúp (0, 1, 2, 3, 5, 6)",
-                  "Cột 4 bị bỏ cách quãng"
-                ],
+                "raw_string": "2134",
+                "normalized_value": 2134.0,
+                "is_valid": true,
+                "anomalies": [],
                 "digits": [
-                  [],
                   [
-                    "8"
+                    "2"
                   ],
-                  [],
                   [
-                    "0",
-                    "1",
-                    "2",
-                    "3",
-                    "5",
-                    "6"
+                    "1"
+                  ],
+                  [
+                    "3"
+                  ],
+                  [
+                    "4"
                   ]
                 ]
               },
               "3": {
-                "raw_string": "__,__",
-                "normalized_value": null,
-                "is_valid": false,
+                "raw_string": "10__",
+                "normalized_value": 10.0,
+                "is_valid": true,
                 "anomalies": [],
                 "digits": [
-                  [],
-                  [],
+                  [
+                    "1"
+                  ],
+                  [
+                    "0"
+                  ],
                   [],
                   []
                 ]
               },
               "4": {
-                "raw_string": "0[17]__",
-                "normalized_value": null,
-                "is_valid": false,
-                "anomalies": [
-                  "Cột 2 tô đúp (1, 7)"
-                ],
+                "raw_string": "3124",
+                "normalized_value": 3124.0,
+                "is_valid": true,
+                "anomalies": [],
                 "digits": [
                   [
-                    "0"
+                    "3"
                   ],
                   [
-                    "1",
-                    "7"
+                    "1"
                   ],
-                  [],
-                  []
+                  [
+                    "2"
+                  ],
+                  [
+                    "4"
+                  ]
                 ]
               }
             }
