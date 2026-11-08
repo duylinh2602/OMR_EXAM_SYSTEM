@@ -4644,73 +4644,41 @@
           },
           "0504": {
             "part1": {
-              "1": "B",
-              "2": "C",
+              "1": "A",
+              "2": "A",
               "3": "A",
               "4": "A",
-              "5": "D",
-              "6": "D",
+              "5": "A",
+              "6": "B",
               "7": "C",
-              "8": "C",
-              "9": "D",
-              "10": "A",
+              "8": "D",
+              "9": "A",
+              "10": "B",
               "11": "C",
-              "12": "B",
-              "13": "B",
-              "14": "D",
-              "15": "B",
-              "16": "D"
+              "12": "D",
+              "13": "A",
+              "14": "B",
+              "15": "C",
+              "16": "D",
+              "17": "A",
+              "18": "B"
             },
-            "part2": {
-              "1": {
-                "a": "S",
-                "b": "Đ",
-                "c": "Đ",
-                "d": "Đ"
-              },
-              "2": {
-                "a": "S",
-                "b": "Đ",
-                "c": "Đ",
-                "d": "S"
-              }
-            },
-            "part3": {
-              "1": 6.0,
-              "2": 2134.0,
-              "3": 10.0,
-              "4": 3124.0
-            }
+            "part2": {},
+            "part3": {}
           }
         }
       },
       "submissions": {
         "1b312875": {
           "file_name": "1793866079997_1554388614628998194_1096305833999352470_d50697a7a6943db35e9545807c83ef6e.jpg",
-          "sbd": "[48]?[98]??[64]?[89]",
+          "sbd": "???????8",
           "exam_code": "0501",
           "raw_exam_code": "0501",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (4 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 3 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 6 tô đúp (6 và 4)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 8 tô đúp (8 và 9)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([48]?[98]??[64]?[89])"
+              "msg": "Số báo danh chưa rõ ràng (???????8)"
             }
           ],
           "scores": {
@@ -4827,39 +4795,26 @@
             }
           },
           "submission_id": "1b312875",
-          "original_filename": "1793866079997_1554388614628998194_1096305833999352470_d50697a7a6943db35e9545807c83ef6e.jpg",
-          "has_error": false
+          "original_filename": "1793866079997_1554388614628998194_1096305833999352470_d50697a7a6943db35e9545807c83ef6e.jpg"
         },
         "1db0b2f5": {
           "file_name": "1793866080087_1554388614628998194_1096305833999352470_d9fe1b085271a3e428c9850b72647b36.jpg",
-          "sbd": "[90]????[98]?[89]",
+          "sbd": "????????",
           "exam_code": "0504",
           "raw_exam_code": "0504",
-          "status": "NEEDS_REVIEW",
+          "status": "GRADED",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (9 và 0)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 6 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 8 tô đúp (8 và 9)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([90]????[98]?[89])"
+              "msg": "Số báo danh chưa rõ ràng (????????)"
             }
           ],
           "scores": {
-            "status": "NEEDS_REVIEW",
-            "p1": 1.25,
-            "p2": 1.0,
-            "p3": 0.25,
-            "total": 2.5
+            "status": "GRADED",
+            "p1": 0.25,
+            "p2": 0.0,
+            "p3": 0.0,
+            "total": 0.25
           },
           "details": {
             "part1": {
@@ -4880,105 +4835,25 @@
               "15": "C",
               "16": "A"
             },
-            "part2": {
-              "1": {
-                "a": "Đ",
-                "b": "S",
-                "c": "Đ",
-                "d": "S"
-              },
-              "2": {
-                "a": "Đ",
-                "b": "Đ",
-                "c": "Đ",
-                "d": "S"
-              }
-            },
-            "part3": {
-              "1": {
-                "raw_string": "6___",
-                "normalized_value": 6.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "6"
-                  ],
-                  [],
-                  [],
-                  []
-                ]
-              },
-              "2": {
-                "raw_string": "2431",
-                "normalized_value": 2431.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "2"
-                  ],
-                  [
-                    "4"
-                  ],
-                  [
-                    "3"
-                  ],
-                  [
-                    "1"
-                  ]
-                ]
-              },
-              "3": {
-                "raw_string": "2___",
-                "normalized_value": 2.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "2"
-                  ],
-                  [],
-                  [],
-                  []
-                ]
-              },
-              "4": {
-                "raw_string": "____",
-                "normalized_value": null,
-                "is_valid": false,
-                "anomalies": [],
-                "digits": [
-                  [],
-                  [],
-                  [],
-                  []
-                ]
-              }
-            }
+            "part2": {},
+            "part3": {}
           },
           "submission_id": "1db0b2f5",
           "original_filename": "1793866080087_1554388614628998194_1096305833999352470_d9fe1b085271a3e428c9850b72647b36.jpg",
-          "has_error": false
+          "has_error": false,
+          "error_msg": null,
+          "updated_at": "2026-11-07T22:35:53.746958"
         },
         "300ab73a": {
           "file_name": "1793866080261_1554388614628998194_1096305833999352470_70dcf339630643e28bbf84c4e7235384.jpg",
-          "sbd": "[89]????[89]??",
+          "sbd": "????????",
           "exam_code": "0503",
           "raw_exam_code": "0503",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (8 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 6 tô đúp (8 và 9)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([89]????[89]??)"
+              "msg": "Số báo danh chưa rõ ràng (????????)"
             }
           ],
           "scores": {
@@ -5089,8 +4964,7 @@
             }
           },
           "submission_id": "300ab73a",
-          "original_filename": "1793866080261_1554388614628998194_1096305833999352470_70dcf339630643e28bbf84c4e7235384.jpg",
-          "has_error": false
+          "original_filename": "1793866080261_1554388614628998194_1096305833999352470_70dcf339630643e28bbf84c4e7235384.jpg"
         },
         "bf13b0fb": {
           "file_name": "1793866080386_1554388614628998194_1096305833999352470_cccd1d3cd0ae607b4de1148c27745852.jpg",
@@ -5102,18 +4976,14 @@
             {
               "type": "MISSING_SBD",
               "msg": "Số báo danh chưa rõ ràng (????????)"
-            },
-            {
-              "type": "P2_DOUBLE_FILL",
-              "msg": "Phần II Câu 2d tô cả Đúng và Sai"
             }
           ],
           "scores": {
             "status": "NEEDS_REVIEW",
-            "p1": 2.5,
-            "p2": 1.75,
-            "p3": 1.0,
-            "total": 5.25
+            "p1": 0.75,
+            "p2": 0.0,
+            "p3": 0.0,
+            "total": 0.75
           },
           "details": {
             "part1": {
@@ -5132,98 +5002,15 @@
               "13": "B",
               "14": "A",
               "15": "B",
-              "16": "D"
+              "16": "D",
+              "17": "",
+              "18": ""
             },
-            "part2": {
-              "1": {
-                "a": "S",
-                "b": "Đ",
-                "c": "Đ",
-                "d": "Đ"
-              },
-              "2": {
-                "a": "S",
-                "b": "Đ",
-                "c": "Đ",
-                "d": "ĐS"
-              }
-            },
-            "part3": {
-              "1": {
-                "raw_string": "6___",
-                "normalized_value": 6.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "6"
-                  ],
-                  [],
-                  [],
-                  []
-                ]
-              },
-              "2": {
-                "raw_string": "2134",
-                "normalized_value": 2134.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "2"
-                  ],
-                  [
-                    "1"
-                  ],
-                  [
-                    "3"
-                  ],
-                  [
-                    "4"
-                  ]
-                ]
-              },
-              "3": {
-                "raw_string": "10__",
-                "normalized_value": 10.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "1"
-                  ],
-                  [
-                    "0"
-                  ],
-                  [],
-                  []
-                ]
-              },
-              "4": {
-                "raw_string": "3124",
-                "normalized_value": 3124.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "3"
-                  ],
-                  [
-                    "1"
-                  ],
-                  [
-                    "2"
-                  ],
-                  [
-                    "4"
-                  ]
-                ]
-              }
-            }
+            "part2": {},
+            "part3": {}
           },
           "submission_id": "bf13b0fb",
-          "original_filename": "1793866080386_1554388614628998194_1096305833999352470_cccd1d3cd0ae607b4de1148c27745852.jpg",
-          "has_error": false
+          "original_filename": "1793866080386_1554388614628998194_1096305833999352470_cccd1d3cd0ae607b4de1148c27745852.jpg"
         },
         "307f437e": {
           "file_name": "1793866080504_1554388614628998194_1096305833999352470_aac0e872b9ff341dd8dcee9463cd053c.jpg",
@@ -5239,10 +5026,10 @@
           ],
           "scores": {
             "status": "NEEDS_REVIEW",
-            "p1": 2.25,
-            "p2": 2.0,
-            "p3": 0.75,
-            "total": 5.0
+            "p1": 0.75,
+            "p2": 0.0,
+            "p3": 0.0,
+            "total": 0.75
           },
           "details": {
             "part1": {
@@ -5261,115 +5048,26 @@
               "13": "B",
               "14": "D",
               "15": "A",
-              "16": "D"
+              "16": "D",
+              "17": "",
+              "18": ""
             },
-            "part2": {
-              "1": {
-                "a": "S",
-                "b": "Đ",
-                "c": "Đ",
-                "d": "Đ"
-              },
-              "2": {
-                "a": "S",
-                "b": "Đ",
-                "c": "Đ",
-                "d": "S"
-              }
-            },
-            "part3": {
-              "1": {
-                "raw_string": "6___",
-                "normalized_value": 6.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "6"
-                  ],
-                  [],
-                  [],
-                  []
-                ]
-              },
-              "2": {
-                "raw_string": "2134",
-                "normalized_value": 2134.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "2"
-                  ],
-                  [
-                    "1"
-                  ],
-                  [
-                    "3"
-                  ],
-                  [
-                    "4"
-                  ]
-                ]
-              },
-              "3": {
-                "raw_string": "1___",
-                "normalized_value": 1.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "1"
-                  ],
-                  [],
-                  [],
-                  []
-                ]
-              },
-              "4": {
-                "raw_string": "3124",
-                "normalized_value": 3124.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "3"
-                  ],
-                  [
-                    "1"
-                  ],
-                  [
-                    "2"
-                  ],
-                  [
-                    "4"
-                  ]
-                ]
-              }
-            }
+            "part2": {},
+            "part3": {}
           },
           "submission_id": "307f437e",
-          "original_filename": "1793866080504_1554388614628998194_1096305833999352470_aac0e872b9ff341dd8dcee9463cd053c.jpg",
-          "has_error": false
+          "original_filename": "1793866080504_1554388614628998194_1096305833999352470_aac0e872b9ff341dd8dcee9463cd053c.jpg"
         },
         "871e1f43": {
           "file_name": "1793866080615_1554388614628998194_1096305833999352470_1ee6210c2a98ec9bd60066cbfff8ba24.jpg",
-          "sbd": "[08]??[90]????",
+          "sbd": "0???????",
           "exam_code": "0503",
           "raw_exam_code": "0503",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (0 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 4 tô đúp (9 và 0)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([08]??[90]????)"
+              "msg": "Số báo danh chưa rõ ràng (0???????)"
             }
           ],
           "scores": {
@@ -5482,35 +5180,26 @@
             }
           },
           "submission_id": "871e1f43",
-          "original_filename": "1793866080615_1554388614628998194_1096305833999352470_1ee6210c2a98ec9bd60066cbfff8ba24.jpg",
-          "has_error": false
+          "original_filename": "1793866080615_1554388614628998194_1096305833999352470_1ee6210c2a98ec9bd60066cbfff8ba24.jpg"
         },
         "6f849192": {
           "file_name": "1793866080719_1554388614628998194_1096305833999352470_0b48eaa98565a03ad1b8346960a11ba3.jpg",
-          "sbd": "[08]?[90]?????",
+          "sbd": "0???????",
           "exam_code": "0504",
           "raw_exam_code": "0504",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (0 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 3 tô đúp (9 và 0)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([08]?[90]?????)"
+              "msg": "Số báo danh chưa rõ ràng (0???????)"
             }
           ],
           "scores": {
             "status": "NEEDS_REVIEW",
-            "p1": 3.25,
-            "p2": 2.0,
-            "p3": 1.0,
-            "total": 6.25
+            "p1": 1.25,
+            "p2": 0.0,
+            "p3": 0.0,
+            "total": 1.25
           },
           "details": {
             "part1": {
@@ -5529,141 +5218,34 @@
               "13": "D",
               "14": "D",
               "15": "B",
-              "16": "D"
+              "16": "D",
+              "17": "",
+              "18": ""
             },
-            "part2": {
-              "1": {
-                "a": "S",
-                "b": "Đ",
-                "c": "Đ",
-                "d": "Đ"
-              },
-              "2": {
-                "a": "S",
-                "b": "Đ",
-                "c": "Đ",
-                "d": "S"
-              }
-            },
-            "part3": {
-              "1": {
-                "raw_string": "6___",
-                "normalized_value": 6.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "6"
-                  ],
-                  [],
-                  [],
-                  []
-                ]
-              },
-              "2": {
-                "raw_string": "2134",
-                "normalized_value": 2134.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "2"
-                  ],
-                  [
-                    "1"
-                  ],
-                  [
-                    "3"
-                  ],
-                  [
-                    "4"
-                  ]
-                ]
-              },
-              "3": {
-                "raw_string": "10__",
-                "normalized_value": 10.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "1"
-                  ],
-                  [
-                    "0"
-                  ],
-                  [],
-                  []
-                ]
-              },
-              "4": {
-                "raw_string": "3124",
-                "normalized_value": 3124.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "3"
-                  ],
-                  [
-                    "1"
-                  ],
-                  [
-                    "2"
-                  ],
-                  [
-                    "4"
-                  ]
-                ]
-              }
-            }
+            "part2": {},
+            "part3": {}
           },
           "submission_id": "6f849192",
-          "original_filename": "1793866080719_1554388614628998194_1096305833999352470_0b48eaa98565a03ad1b8346960a11ba3.jpg",
-          "has_error": false
+          "original_filename": "1793866080719_1554388614628998194_1096305833999352470_0b48eaa98565a03ad1b8346960a11ba3.jpg"
         },
         "b1cd5af4": {
           "file_name": "1793866080806_1554388614628998194_1096305833999352470_e729df3a176b5c6dbdf6d41aea7478c9.jpg",
-          "sbd": "[89]?[98][90][98][98]??",
+          "sbd": "????????",
           "exam_code": "0502",
           "raw_exam_code": "0502",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (8 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 3 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 4 tô đúp (9 và 0)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 5 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 6 tô đúp (9 và 8)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([89]?[98][90][98][98]??)"
-            },
-            {
-              "type": "P2_DOUBLE_FILL",
-              "msg": "Phần II Câu 2d tô cả Đúng và Sai"
+              "msg": "Số báo danh chưa rõ ràng (????????)"
             }
           ],
           "scores": {
             "status": "NEEDS_REVIEW",
             "p1": 2.75,
-            "p2": 1.75,
+            "p2": 2.0,
             "p3": 1.0,
-            "total": 5.5
+            "total": 5.75
           },
           "details": {
             "part1": {
@@ -5695,7 +5277,7 @@
                 "a": "S",
                 "b": "S",
                 "c": "Đ",
-                "d": "ĐS"
+                "d": "Đ"
               }
             },
             "part3": {
@@ -5772,19 +5354,18 @@
             }
           },
           "submission_id": "b1cd5af4",
-          "original_filename": "1793866080806_1554388614628998194_1096305833999352470_e729df3a176b5c6dbdf6d41aea7478c9.jpg",
-          "has_error": false
+          "original_filename": "1793866080806_1554388614628998194_1096305833999352470_e729df3a176b5c6dbdf6d41aea7478c9.jpg"
         },
         "5557d3c9": {
           "file_name": "1793866080897_1554388614628998194_1096305833999352470_22fa86e87a58fe8c2b506ba4307e1d03.jpg",
-          "sbd": "0??0????",
+          "sbd": "0???????",
           "exam_code": "0502",
           "raw_exam_code": "0502",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng (0??0????)"
+              "msg": "Số báo danh chưa rõ ràng (0???????)"
             }
           ],
           "scores": {
@@ -5901,63 +5482,26 @@
             }
           },
           "submission_id": "5557d3c9",
-          "original_filename": "1793866080897_1554388614628998194_1096305833999352470_22fa86e87a58fe8c2b506ba4307e1d03.jpg",
-          "has_error": false
+          "original_filename": "1793866080897_1554388614628998194_1096305833999352470_22fa86e87a58fe8c2b506ba4307e1d03.jpg"
         },
         "cfa461d6": {
           "file_name": "1793866081013_1554388614628998194_1096305833999352470_64fa76690d8a11b1b6db42926442aeac.jpg",
-          "sbd": "[98][90][98][90][80][98][09][89]",
+          "sbd": "????????",
           "exam_code": "0501",
           "raw_exam_code": "0501",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 2 tô đúp (9 và 0)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 3 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 4 tô đúp (9 và 0)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 5 tô đúp (8 và 0)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 6 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 7 tô đúp (0 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 8 tô đúp (8 và 9)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([98][90][98][90][80][98][09][89])"
-            },
-            {
-              "type": "P2_DOUBLE_FILL",
-              "msg": "Phần II Câu 2d tô cả Đúng và Sai"
+              "msg": "Số báo danh chưa rõ ràng (????????)"
             }
           ],
           "scores": {
             "status": "NEEDS_REVIEW",
             "p1": 2.0,
-            "p2": 1.75,
+            "p2": 2.0,
             "p3": 1.0,
-            "total": 4.75
+            "total": 5.0
           },
           "details": {
             "part1": {
@@ -5989,7 +5533,7 @@
                 "a": "S",
                 "b": "S",
                 "c": "Đ",
-                "d": "ĐS"
+                "d": "Đ"
               }
             },
             "part3": {
@@ -6066,59 +5610,26 @@
             }
           },
           "submission_id": "cfa461d6",
-          "original_filename": "1793866081013_1554388614628998194_1096305833999352470_64fa76690d8a11b1b6db42926442aeac.jpg",
-          "has_error": false
+          "original_filename": "1793866081013_1554388614628998194_1096305833999352470_64fa76690d8a11b1b6db42926442aeac.jpg"
         },
         "280d7292": {
           "file_name": "1793866081113_1554388614628998194_1096305833999352470_9cce82c9a0d288fbaaacf7878def1fee.jpg",
-          "sbd": "[09][90][89][09][80][98][98][89]",
+          "sbd": "????????",
           "exam_code": "0504",
           "raw_exam_code": "0504",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (0 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 2 tô đúp (9 và 0)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 3 tô đúp (8 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 4 tô đúp (0 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 5 tô đúp (8 và 0)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 6 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 7 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 8 tô đúp (8 và 9)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([09][90][89][09][80][98][98][89])"
+              "msg": "Số báo danh chưa rõ ràng (????????)"
             }
           ],
           "scores": {
             "status": "NEEDS_REVIEW",
-            "p1": 2.5,
-            "p2": 2.0,
-            "p3": 0.5,
-            "total": 5.0
+            "p1": 0.75,
+            "p2": 0.0,
+            "p3": 0.0,
+            "total": 0.75
           },
           "details": {
             "part1": {
@@ -6137,121 +5648,26 @@
               "13": "B",
               "14": "D",
               "15": "A",
-              "16": "D"
+              "16": "D",
+              "17": "",
+              "18": ""
             },
-            "part2": {
-              "1": {
-                "a": "S",
-                "b": "Đ",
-                "c": "Đ",
-                "d": "Đ"
-              },
-              "2": {
-                "a": "S",
-                "b": "Đ",
-                "c": "Đ",
-                "d": "S"
-              }
-            },
-            "part3": {
-              "1": {
-                "raw_string": "_,6__",
-                "normalized_value": null,
-                "is_valid": false,
-                "anomalies": [],
-                "digits": [
-                  [],
-                  [
-                    "6"
-                  ],
-                  [],
-                  []
-                ]
-              },
-              "2": {
-                "raw_string": "2134",
-                "normalized_value": 2134.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "2"
-                  ],
-                  [
-                    "1"
-                  ],
-                  [
-                    "3"
-                  ],
-                  [
-                    "4"
-                  ]
-                ]
-              },
-              "3": {
-                "raw_string": "20__",
-                "normalized_value": 20.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "2"
-                  ],
-                  [
-                    "0"
-                  ],
-                  [],
-                  []
-                ]
-              },
-              "4": {
-                "raw_string": "3124",
-                "normalized_value": 3124.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "3"
-                  ],
-                  [
-                    "1"
-                  ],
-                  [
-                    "2"
-                  ],
-                  [
-                    "4"
-                  ]
-                ]
-              }
-            }
+            "part2": {},
+            "part3": {}
           },
           "submission_id": "280d7292",
-          "original_filename": "1793866081113_1554388614628998194_1096305833999352470_9cce82c9a0d288fbaaacf7878def1fee.jpg",
-          "has_error": false
+          "original_filename": "1793866081113_1554388614628998194_1096305833999352470_9cce82c9a0d288fbaaacf7878def1fee.jpg"
         },
         "836b2549": {
           "file_name": "1793866081205_1554388614628998194_1096305833999352470_ba3b536ab321d9251a8295623fca7ffd.jpg",
-          "sbd": "[98][89]?????[89]",
+          "sbd": "????????",
           "exam_code": "0503",
           "raw_exam_code": "0503",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 2 tô đúp (8 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 8 tô đúp (8 và 9)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([98][89]?????[89])"
+              "msg": "Số báo danh chưa rõ ràng (????????)"
             }
           ],
           "scores": {
@@ -6368,43 +5784,18 @@
             }
           },
           "submission_id": "836b2549",
-          "original_filename": "1793866081205_1554388614628998194_1096305833999352470_ba3b536ab321d9251a8295623fca7ffd.jpg",
-          "has_error": false
+          "original_filename": "1793866081205_1554388614628998194_1096305833999352470_ba3b536ab321d9251a8295623fca7ffd.jpg"
         },
         "a3800873": {
           "file_name": "1793866081316_1554388614628998194_1096305833999352470_84511a18fb674c815f89c1304a168049.jpg",
-          "sbd": "[89][98][98]?[89][89]?[89]",
+          "sbd": "????????",
           "exam_code": "0503",
           "raw_exam_code": "0503",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (8 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 2 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 3 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 5 tô đúp (8 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 6 tô đúp (8 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 8 tô đúp (8 và 9)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([89][98][98]?[89][89]?[89])"
+              "msg": "Số báo danh chưa rõ ràng (????????)"
             }
           ],
           "scores": {
@@ -6521,47 +5912,26 @@
             }
           },
           "submission_id": "a3800873",
-          "original_filename": "1793866081316_1554388614628998194_1096305833999352470_84511a18fb674c815f89c1304a168049.jpg",
-          "has_error": false
+          "original_filename": "1793866081316_1554388614628998194_1096305833999352470_84511a18fb674c815f89c1304a168049.jpg"
         },
         "9e55ec56": {
           "file_name": "1793866081422_1554388614628998194_1096305833999352470_19829599b260503fbd10b8c8e0971202.jpg",
-          "sbd": "[98]?[98][90]?[98]??",
+          "sbd": "????????",
           "exam_code": "0504",
           "raw_exam_code": "0504",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 3 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 4 tô đúp (9 và 0)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 6 tô đúp (9 và 8)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([98]?[98][90]?[98]??)"
-            },
-            {
-              "type": "P2_DOUBLE_FILL",
-              "msg": "Phần II Câu 2c tô cả Đúng và Sai"
+              "msg": "Số báo danh chưa rõ ràng (????????)"
             }
           ],
           "scores": {
             "status": "NEEDS_REVIEW",
-            "p1": 2.5,
-            "p2": 1.75,
-            "p3": 1.0,
-            "total": 5.25
+            "p1": 0.5,
+            "p2": 0.0,
+            "p3": 0.0,
+            "total": 0.5
           },
           "details": {
             "part1": {
@@ -6580,98 +5950,15 @@
               "13": "B",
               "14": "A",
               "15": "B",
-              "16": "B"
+              "16": "B",
+              "17": "",
+              "18": ""
             },
-            "part2": {
-              "1": {
-                "a": "S",
-                "b": "Đ",
-                "c": "Đ",
-                "d": "Đ"
-              },
-              "2": {
-                "a": "S",
-                "b": "Đ",
-                "c": "ĐS",
-                "d": "S"
-              }
-            },
-            "part3": {
-              "1": {
-                "raw_string": "6___",
-                "normalized_value": 6.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "6"
-                  ],
-                  [],
-                  [],
-                  []
-                ]
-              },
-              "2": {
-                "raw_string": "2134",
-                "normalized_value": 2134.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "2"
-                  ],
-                  [
-                    "1"
-                  ],
-                  [
-                    "3"
-                  ],
-                  [
-                    "4"
-                  ]
-                ]
-              },
-              "3": {
-                "raw_string": "10__",
-                "normalized_value": 10.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "1"
-                  ],
-                  [
-                    "0"
-                  ],
-                  [],
-                  []
-                ]
-              },
-              "4": {
-                "raw_string": "3124",
-                "normalized_value": 3124.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "3"
-                  ],
-                  [
-                    "1"
-                  ],
-                  [
-                    "2"
-                  ],
-                  [
-                    "4"
-                  ]
-                ]
-              }
-            }
+            "part2": {},
+            "part3": {}
           },
           "submission_id": "9e55ec56",
-          "original_filename": "1793866081422_1554388614628998194_1096305833999352470_19829599b260503fbd10b8c8e0971202.jpg",
-          "has_error": false
+          "original_filename": "1793866081422_1554388614628998194_1096305833999352470_19829599b260503fbd10b8c8e0971202.jpg"
         },
         "cc865c91": {
           "file_name": "1793866081527_1554388614628998194_1096305833999352470_dd54f4f4a6886839c61e416de7933ac7.jpg",
@@ -6799,43 +6086,18 @@
             }
           },
           "submission_id": "cc865c91",
-          "original_filename": "1793866081527_1554388614628998194_1096305833999352470_dd54f4f4a6886839c61e416de7933ac7.jpg",
-          "has_error": false
+          "original_filename": "1793866081527_1554388614628998194_1096305833999352470_dd54f4f4a6886839c61e416de7933ac7.jpg"
         },
         "52127623": {
           "file_name": "1793866081625_1554388614628998194_1096305833999352470_486421d894e360c7fae282360f05a8a7.jpg",
-          "sbd": "[08][89][98]?[89][89]?[80]",
+          "sbd": "????????",
           "exam_code": "0501",
           "raw_exam_code": "0501",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (0 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 2 tô đúp (8 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 3 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 5 tô đúp (8 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 6 tô đúp (8 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 8 tô đúp (8 và 0)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([08][89][98]?[89][89]?[80])"
+              "msg": "Số báo danh chưa rõ ràng (????????)"
             }
           ],
           "scores": {
@@ -6956,31 +6218,18 @@
             }
           },
           "submission_id": "52127623",
-          "original_filename": "1793866081625_1554388614628998194_1096305833999352470_486421d894e360c7fae282360f05a8a7.jpg",
-          "has_error": false
+          "original_filename": "1793866081625_1554388614628998194_1096305833999352470_486421d894e360c7fae282360f05a8a7.jpg"
         },
         "c04c3ff7": {
           "file_name": "1793866081719_1554388614628998194_1096305833999352470_8f844adc3caa3370f9a7507da8a22a2b.jpg",
-          "sbd": "[09]??[09]?[98]??",
+          "sbd": "????????",
           "exam_code": "0501",
           "raw_exam_code": "0501",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (0 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 4 tô đúp (0 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 6 tô đúp (9 và 8)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([09]??[09]?[98]??)"
+              "msg": "Số báo danh chưa rõ ràng (????????)"
             }
           ],
           "scores": {
@@ -7097,47 +6346,26 @@
             }
           },
           "submission_id": "c04c3ff7",
-          "original_filename": "1793866081719_1554388614628998194_1096305833999352470_8f844adc3caa3370f9a7507da8a22a2b.jpg",
-          "has_error": false
+          "original_filename": "1793866081719_1554388614628998194_1096305833999352470_8f844adc3caa3370f9a7507da8a22a2b.jpg"
         },
         "675f1de7": {
           "file_name": "1793866081807_1554388614628998194_1096305833999352470_a591c7d015358272d87764bec3fe7e56.jpg",
-          "sbd": "[89][98][98]????[89]",
+          "sbd": "????????",
           "exam_code": "0502",
           "raw_exam_code": "0502",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (8 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 2 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 3 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 8 tô đúp (8 và 9)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([89][98][98]????[89])"
-            },
-            {
-              "type": "P2_DOUBLE_FILL",
-              "msg": "Phần II Câu 2d tô cả Đúng và Sai"
+              "msg": "Số báo danh chưa rõ ràng (????????)"
             }
           ],
           "scores": {
             "status": "NEEDS_REVIEW",
             "p1": 2.5,
-            "p2": 1.25,
+            "p2": 1.5,
             "p3": 1.0,
-            "total": 4.75
+            "total": 5.0
           },
           "details": {
             "part1": {
@@ -7169,7 +6397,7 @@
                 "a": "Đ",
                 "b": "S",
                 "c": "Đ",
-                "d": "ĐS"
+                "d": "Đ"
               }
             },
             "part3": {
@@ -7246,43 +6474,26 @@
             }
           },
           "submission_id": "675f1de7",
-          "original_filename": "1793866081807_1554388614628998194_1096305833999352470_a591c7d015358272d87764bec3fe7e56.jpg",
-          "has_error": false
+          "original_filename": "1793866081807_1554388614628998194_1096305833999352470_a591c7d015358272d87764bec3fe7e56.jpg"
         },
         "9d044b09": {
           "file_name": "1793866081891_1554388614628998194_1096305833999352470_0a8edb097d0446124ec78d8b7a59cb64.jpg",
-          "sbd": "[98][98]???[98]?[89]",
+          "sbd": "????????",
           "exam_code": "0504",
           "raw_exam_code": "0504",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 2 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 6 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 8 tô đúp (8 và 9)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([98][98]???[98]?[89])"
+              "msg": "Số báo danh chưa rõ ràng (????????)"
             }
           ],
           "scores": {
             "status": "NEEDS_REVIEW",
-            "p1": 2.75,
-            "p2": 1.75,
-            "p3": 1.0,
-            "total": 5.5
+            "p1": 1.0,
+            "p2": 0.0,
+            "p3": 0.0,
+            "total": 1.0
           },
           "details": {
             "part1": {
@@ -7301,149 +6512,34 @@
               "13": "B",
               "14": "B",
               "15": "B",
-              "16": "D"
+              "16": "D",
+              "17": "",
+              "18": ""
             },
-            "part2": {
-              "1": {
-                "a": "S",
-                "b": "Đ",
-                "c": "Đ",
-                "d": "S"
-              },
-              "2": {
-                "a": "S",
-                "b": "Đ",
-                "c": "Đ",
-                "d": "S"
-              }
-            },
-            "part3": {
-              "1": {
-                "raw_string": "6___",
-                "normalized_value": 6.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "6"
-                  ],
-                  [],
-                  [],
-                  []
-                ]
-              },
-              "2": {
-                "raw_string": "2134",
-                "normalized_value": 2134.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "2"
-                  ],
-                  [
-                    "1"
-                  ],
-                  [
-                    "3"
-                  ],
-                  [
-                    "4"
-                  ]
-                ]
-              },
-              "3": {
-                "raw_string": "10__",
-                "normalized_value": 10.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "1"
-                  ],
-                  [
-                    "0"
-                  ],
-                  [],
-                  []
-                ]
-              },
-              "4": {
-                "raw_string": "3124",
-                "normalized_value": 3124.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "3"
-                  ],
-                  [
-                    "1"
-                  ],
-                  [
-                    "2"
-                  ],
-                  [
-                    "4"
-                  ]
-                ]
-              }
-            }
+            "part2": {},
+            "part3": {}
           },
           "submission_id": "9d044b09",
-          "original_filename": "1793866081891_1554388614628998194_1096305833999352470_0a8edb097d0446124ec78d8b7a59cb64.jpg",
-          "has_error": false
+          "original_filename": "1793866081891_1554388614628998194_1096305833999352470_0a8edb097d0446124ec78d8b7a59cb64.jpg"
         },
         "f5f7803f": {
           "file_name": "1793866081986_1554388614628998194_1096305833999352470_3efd9d858f236484d9c1b504c7d8092b.jpg",
-          "sbd": "[09]?[98][09][09][98][89][89]",
+          "sbd": "????????",
           "exam_code": "0501",
           "raw_exam_code": "0501",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (0 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 3 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 4 tô đúp (0 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 5 tô đúp (0 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 6 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 7 tô đúp (8 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 8 tô đúp (8 và 9)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([09]?[98][09][09][98][89][89])"
-            },
-            {
-              "type": "P2_DOUBLE_FILL",
-              "msg": "Phần II Câu 2d tô cả Đúng và Sai"
+              "msg": "Số báo danh chưa rõ ràng (????????)"
             }
           ],
           "scores": {
             "status": "NEEDS_REVIEW",
             "p1": 3.0,
-            "p2": 0.75,
+            "p2": 1.0,
             "p3": 0.25,
-            "total": 4.0
+            "total": 4.25
           },
           "details": {
             "part1": {
@@ -7475,7 +6571,7 @@
                 "a": "S",
                 "b": "S",
                 "c": "Đ",
-                "d": "ĐS"
+                "d": "Đ"
               }
             },
             "part3": {
@@ -7538,8 +6634,7 @@
             }
           },
           "submission_id": "f5f7803f",
-          "original_filename": "1793866081986_1554388614628998194_1096305833999352470_3efd9d858f236484d9c1b504c7d8092b.jpg",
-          "has_error": false
+          "original_filename": "1793866081986_1554388614628998194_1096305833999352470_3efd9d858f236484d9c1b504c7d8092b.jpg"
         },
         "6ed2cd1b": {
           "file_name": "1793866082078_1554388614628998194_1096305833999352470_58430ab19798c7d4bffb592988fcdc36.jpg",
@@ -7667,51 +6762,18 @@
             }
           },
           "submission_id": "6ed2cd1b",
-          "original_filename": "1793866082078_1554388614628998194_1096305833999352470_58430ab19798c7d4bffb592988fcdc36.jpg",
-          "has_error": false
+          "original_filename": "1793866082078_1554388614628998194_1096305833999352470_58430ab19798c7d4bffb592988fcdc36.jpg"
         },
         "0070e550": {
           "file_name": "1793866082186_1554388614628998194_1096305833999352470_fed581babccfd1f4467e1baa0891e43e.jpg",
-          "sbd": "[90][98][98][90][98][98][98][89]",
+          "sbd": "????????",
           "exam_code": "0503",
           "raw_exam_code": "0503",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (9 và 0)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 2 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 3 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 4 tô đúp (9 và 0)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 5 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 6 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 7 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 8 tô đúp (8 và 9)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([90][98][98][90][98][98][98][89])"
+              "msg": "Số báo danh chưa rõ ràng (????????)"
             }
           ],
           "scores": {
@@ -7828,55 +6890,26 @@
             }
           },
           "submission_id": "0070e550",
-          "original_filename": "1793866082186_1554388614628998194_1096305833999352470_fed581babccfd1f4467e1baa0891e43e.jpg",
-          "has_error": false
+          "original_filename": "1793866082186_1554388614628998194_1096305833999352470_fed581babccfd1f4467e1baa0891e43e.jpg"
         },
         "294a8306": {
           "file_name": "1793866082279_1554388614628998194_1096305833999352470_59fda9cc834f019d0e8bf29fdf7e3e42.jpg",
-          "sbd": "[98]9[98]9[89][98][98][89]",
+          "sbd": "?9?9????",
           "exam_code": "0502",
           "raw_exam_code": "0502",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 3 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 5 tô đúp (8 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 6 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 7 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 8 tô đúp (8 và 9)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([98]9[98]9[89][98][98][89])"
-            },
-            {
-              "type": "P2_DOUBLE_FILL",
-              "msg": "Phần II Câu 2d tô cả Đúng và Sai"
+              "msg": "Số báo danh chưa rõ ràng (?9?9????)"
             }
           ],
           "scores": {
             "status": "NEEDS_REVIEW",
             "p1": 1.0,
-            "p2": 1.5,
+            "p2": 1.75,
             "p3": 0.75,
-            "total": 3.25
+            "total": 3.5
           },
           "details": {
             "part1": {
@@ -7908,7 +6941,7 @@
                 "a": "S",
                 "b": "S",
                 "c": "Đ",
-                "d": "ĐS"
+                "d": "Đ"
               }
             },
             "part3": {
@@ -7989,27 +7022,26 @@
             }
           },
           "submission_id": "294a8306",
-          "original_filename": "1793866082279_1554388614628998194_1096305833999352470_59fda9cc834f019d0e8bf29fdf7e3e42.jpg",
-          "has_error": false
+          "original_filename": "1793866082279_1554388614628998194_1096305833999352470_59fda9cc834f019d0e8bf29fdf7e3e42.jpg"
         },
         "e300d938": {
           "file_name": "1793866082375_1554388614628998194_1096305833999352470_163fb42f5be00d53d94aa2c9d3f0cdc5.jpg",
-          "sbd": "???0????",
+          "sbd": "????????",
           "exam_code": "0504",
           "raw_exam_code": "0504",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng (???0????)"
+              "msg": "Số báo danh chưa rõ ràng (????????)"
             }
           ],
           "scores": {
             "status": "NEEDS_REVIEW",
-            "p1": 1.75,
-            "p2": 2.0,
-            "p3": 1.0,
-            "total": 4.75
+            "p1": 0.75,
+            "p2": 0.0,
+            "p3": 0.0,
+            "total": 0.75
           },
           "details": {
             "part1": {
@@ -8028,98 +7060,15 @@
               "13": "D",
               "14": "D",
               "15": "B",
-              "16": "C"
+              "16": "C",
+              "17": "",
+              "18": ""
             },
-            "part2": {
-              "1": {
-                "a": "S",
-                "b": "Đ",
-                "c": "Đ",
-                "d": "Đ"
-              },
-              "2": {
-                "a": "S",
-                "b": "Đ",
-                "c": "Đ",
-                "d": "S"
-              }
-            },
-            "part3": {
-              "1": {
-                "raw_string": "6___",
-                "normalized_value": 6.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "6"
-                  ],
-                  [],
-                  [],
-                  []
-                ]
-              },
-              "2": {
-                "raw_string": "2134",
-                "normalized_value": 2134.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "2"
-                  ],
-                  [
-                    "1"
-                  ],
-                  [
-                    "3"
-                  ],
-                  [
-                    "4"
-                  ]
-                ]
-              },
-              "3": {
-                "raw_string": "10__",
-                "normalized_value": 10.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "1"
-                  ],
-                  [
-                    "0"
-                  ],
-                  [],
-                  []
-                ]
-              },
-              "4": {
-                "raw_string": "3124",
-                "normalized_value": 3124.0,
-                "is_valid": true,
-                "anomalies": [],
-                "digits": [
-                  [
-                    "3"
-                  ],
-                  [
-                    "1"
-                  ],
-                  [
-                    "2"
-                  ],
-                  [
-                    "4"
-                  ]
-                ]
-              }
-            }
+            "part2": {},
+            "part3": {}
           },
           "submission_id": "e300d938",
-          "original_filename": "1793866082375_1554388614628998194_1096305833999352470_163fb42f5be00d53d94aa2c9d3f0cdc5.jpg",
-          "has_error": false
+          "original_filename": "1793866082375_1554388614628998194_1096305833999352470_163fb42f5be00d53d94aa2c9d3f0cdc5.jpg"
         },
         "38edc321": {
           "file_name": "1793866082474_1554388614628998194_1096305833999352470_b2e74c5343731c7bed577a52169eb289.jpg",
@@ -8131,18 +7080,14 @@
             {
               "type": "MISSING_SBD",
               "msg": "Số báo danh chưa rõ ràng (????????)"
-            },
-            {
-              "type": "P2_DOUBLE_FILL",
-              "msg": "Phần II Câu 2a tô cả Đúng và Sai"
             }
           ],
           "scores": {
             "status": "NEEDS_REVIEW",
             "p1": 2.0,
-            "p2": 1.75,
+            "p2": 2.0,
             "p3": 1.0,
-            "total": 4.75
+            "total": 5.0
           },
           "details": {
             "part1": {
@@ -8171,7 +7116,7 @@
                 "d": "S"
               },
               "2": {
-                "a": "ĐS",
+                "a": "S",
                 "b": "S",
                 "c": "Đ",
                 "d": "Đ"
@@ -8251,51 +7196,31 @@
             }
           },
           "submission_id": "38edc321",
-          "original_filename": "1793866082474_1554388614628998194_1096305833999352470_b2e74c5343731c7bed577a52169eb289.jpg",
-          "has_error": false
+          "original_filename": "1793866082474_1554388614628998194_1096305833999352470_b2e74c5343731c7bed577a52169eb289.jpg"
         },
         "3fb4cf4c": {
           "file_name": "1793866082558_1554388614628998194_1096305833999352470_668a07ac06dad41b10a0940115ac6611.jpg",
-          "sbd": "??[89][90]?[98][89]8",
+          "sbd": "????8??8",
           "exam_code": "0502",
           "raw_exam_code": "0502",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 3 tô đúp (8 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 4 tô đúp (9 và 0)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 6 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 7 tô đúp (8 và 9)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng (??[89][90]?[98][89]8)"
-            },
-            {
-              "type": "P2_DOUBLE_FILL",
-              "msg": "Phần II Câu 2d tô cả Đúng và Sai"
+              "msg": "Số báo danh chưa rõ ràng (????8??8)"
             },
             {
               "type": "P3_Q3_VIOLATION",
-              "msg": "Phần III Câu 3 phạm quy chế: Cột 2 tô đúp (1, 3); Cột 4 bị bỏ cách quãng"
+              "msg": "Phần III Câu 3 phạm quy chế: Cột 2 tô đúp (1, 3); Cột 4 bị bỏ cách quãng",
+              "crop_b64": ""
             }
           ],
           "scores": {
             "status": "NEEDS_REVIEW",
             "p1": 2.25,
-            "p2": 1.75,
+            "p2": 2.0,
             "p3": 0.75,
-            "total": 4.75
+            "total": 5.0
           },
           "details": {
             "part1": {
@@ -8327,7 +7252,7 @@
                 "a": "S",
                 "b": "S",
                 "c": "Đ",
-                "d": "ĐS"
+                "d": "Đ"
               }
             },
             "part3": {
@@ -8406,8 +7331,7 @@
             }
           },
           "submission_id": "3fb4cf4c",
-          "original_filename": "1793866082558_1554388614628998194_1096305833999352470_668a07ac06dad41b10a0940115ac6611.jpg",
-          "has_error": false
+          "original_filename": "1793866082558_1554388614628998194_1096305833999352470_668a07ac06dad41b10a0940115ac6611.jpg"
         },
         "c1f79a77": {
           "file_name": "1793866082652_1554388614628998194_1096305833999352470_d6c7c354d65b76db6c98ff8d6d2e50e8.jpg",
@@ -8419,18 +7343,14 @@
             {
               "type": "MISSING_SBD",
               "msg": "Số báo danh chưa rõ ràng (????????)"
-            },
-            {
-              "type": "P2_DOUBLE_FILL",
-              "msg": "Phần II Câu 2d tô cả Đúng và Sai"
             }
           ],
           "scores": {
             "status": "NEEDS_REVIEW",
             "p1": 2.5,
-            "p2": 1.75,
+            "p2": 2.0,
             "p3": 0.75,
-            "total": 5.0
+            "total": 5.25
           },
           "details": {
             "part1": {
@@ -8462,7 +7382,7 @@
                 "a": "S",
                 "b": "S",
                 "c": "Đ",
-                "d": "ĐS"
+                "d": "Đ"
               }
             },
             "part3": {
@@ -8543,39 +7463,18 @@
             }
           },
           "submission_id": "c1f79a77",
-          "original_filename": "1793866082652_1554388614628998194_1096305833999352470_d6c7c354d65b76db6c98ff8d6d2e50e8.jpg",
-          "has_error": false
+          "original_filename": "1793866082652_1554388614628998194_1096305833999352470_d6c7c354d65b76db6c98ff8d6d2e50e8.jpg"
         },
         "30d6ba73": {
           "file_name": "1793866082733_1554388614628998194_1096305833999352470_8f713fd5f6ceae0ccbbd2f31c51b559e.jpg",
-          "sbd": "[89]?[98]??[98][98][89]",
+          "sbd": "????????",
           "exam_code": "0501",
           "raw_exam_code": "0501",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (8 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 3 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 6 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 7 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 8 tô đúp (8 và 9)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([89]?[98]??[98][98][89])"
+              "msg": "Số báo danh chưa rõ ràng (????????)"
             }
           ],
           "scores": {
@@ -8692,23 +7591,18 @@
             }
           },
           "submission_id": "30d6ba73",
-          "original_filename": "1793866082733_1554388614628998194_1096305833999352470_8f713fd5f6ceae0ccbbd2f31c51b559e.jpg",
-          "has_error": false
+          "original_filename": "1793866082733_1554388614628998194_1096305833999352470_8f713fd5f6ceae0ccbbd2f31c51b559e.jpg"
         },
         "1ceaeaa6": {
           "file_name": "1793866082812_1554388614628998194_1096305833999352470_49ef8ae4137debf3bcde492607c86be7.jpg",
-          "sbd": "???????[89]",
+          "sbd": "????????",
           "exam_code": "0503",
           "raw_exam_code": "0503",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 8 tô đúp (8 và 9)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng (???????[89])"
+              "msg": "Số báo danh chưa rõ ràng (????????)"
             }
           ],
           "scores": {
@@ -8823,8 +7717,7 @@
             }
           },
           "submission_id": "1ceaeaa6",
-          "original_filename": "1793866082812_1554388614628998194_1096305833999352470_49ef8ae4137debf3bcde492607c86be7.jpg",
-          "has_error": false
+          "original_filename": "1793866082812_1554388614628998194_1096305833999352470_49ef8ae4137debf3bcde492607c86be7.jpg"
         },
         "e094a3d8": {
           "file_name": "1793866082896_1554388614628998194_1096305833999352470_db1d45754f89292b38b25b2017959001.jpg",
@@ -8952,47 +7845,18 @@
             }
           },
           "submission_id": "e094a3d8",
-          "original_filename": "1793866082896_1554388614628998194_1096305833999352470_db1d45754f89292b38b25b2017959001.jpg",
-          "has_error": false
+          "original_filename": "1793866082896_1554388614628998194_1096305833999352470_db1d45754f89292b38b25b2017959001.jpg"
         },
         "8d18e3af": {
           "file_name": "1793866082982_1554388614628998194_1096305833999352470_74a4ec4ad39693a8762a18f3f3c6594b.jpg",
-          "sbd": "[90]?[98][90][98][98][89][89]",
+          "sbd": "????????",
           "exam_code": "0502",
           "raw_exam_code": "0502",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (9 và 0)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 3 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 4 tô đúp (9 và 0)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 5 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 6 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 7 tô đúp (8 và 9)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 8 tô đúp (8 và 9)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([90]?[98][90][98][98][89][89])"
+              "msg": "Số báo danh chưa rõ ràng (????????)"
             }
           ],
           "scores": {
@@ -9105,35 +7969,23 @@
             }
           },
           "submission_id": "8d18e3af",
-          "original_filename": "1793866082982_1554388614628998194_1096305833999352470_74a4ec4ad39693a8762a18f3f3c6594b.jpg",
-          "has_error": false
+          "original_filename": "1793866082982_1554388614628998194_1096305833999352470_74a4ec4ad39693a8762a18f3f3c6594b.jpg"
         },
         "ec5c54e6": {
           "file_name": "1793866083068_1554388614628998194_1096305833999352470_bb0a6b983aceab3856bf75fcf423c3a6.jpg",
-          "sbd": "[80]?[98]????[89]",
+          "sbd": "????????",
           "exam_code": "0502",
           "raw_exam_code": "0502",
           "status": "NEEDS_REVIEW",
           "anomalies": [
             {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 1 tô đúp (8 và 0)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 3 tô đúp (9 và 8)"
-            },
-            {
-              "type": "SBD_DOUBLE_FILL",
-              "msg": "SBD Cột 8 tô đúp (8 và 9)"
-            },
-            {
               "type": "MISSING_SBD",
-              "msg": "Số báo danh chưa rõ ràng ([80]?[98]????[89])"
+              "msg": "Số báo danh chưa rõ ràng (????????)"
             },
             {
               "type": "P3_Q2_VIOLATION",
-              "msg": "Phần III Câu 2 phạm quy chế: Cột 3 tô đúp (3, 4)"
+              "msg": "Phần III Câu 2 phạm quy chế: Cột 3 tô đúp (3, 4)",
+              "crop_b64": ""
             }
           ],
           "scores": {
@@ -9239,8 +8091,325 @@
             }
           },
           "submission_id": "ec5c54e6",
-          "original_filename": "1793866083068_1554388614628998194_1096305833999352470_bb0a6b983aceab3856bf75fcf423c3a6.jpg",
-          "has_error": false
+          "original_filename": "1793866083068_1554388614628998194_1096305833999352470_bb0a6b983aceab3856bf75fcf423c3a6.jpg"
+        },
+        "99084c99": {
+          "file_name": "1793866051213_1554388614628998194_1096305833999352470_83287a77a34db5785e8410a4e215d9c4.jpg",
+          "sbd": "[90][90][98][90][90][89][90][89]",
+          "exam_code": "0503",
+          "raw_exam_code": "0503",
+          "status": "NEEDS_REVIEW",
+          "anomalies": [
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 1 tô đúp (9 và 0)"
+            },
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 2 tô đúp (9 và 0)"
+            },
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 3 tô đúp (9 và 8)"
+            },
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 4 tô đúp (9 và 0)"
+            },
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 5 tô đúp (9 và 0)"
+            },
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 6 tô đúp (8 và 9)"
+            },
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 7 tô đúp (9 và 0)"
+            },
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 8 tô đúp (8 và 9)"
+            },
+            {
+              "type": "MISSING_SBD",
+              "msg": "Số báo danh chưa rõ ràng ([90][90][98][90][90][89][90][89])"
+            },
+            {
+              "type": "P2_DOUBLE_FILL",
+              "msg": "Phần II Câu 2a tô cả Đúng và Sai"
+            }
+          ],
+          "scores": {
+            "status": "NEEDS_REVIEW",
+            "p1": 2.5,
+            "p2": 1.5,
+            "p3": 0.0,
+            "total": 4.0
+          },
+          "details": {
+            "part1": {
+              "1": "B",
+              "2": "C",
+              "3": "B",
+              "4": "B",
+              "5": "C",
+              "6": "B",
+              "7": "A",
+              "8": "A",
+              "9": "B",
+              "10": "D",
+              "11": "B",
+              "12": "A",
+              "13": "B",
+              "14": "D",
+              "15": "C",
+              "16": "A"
+            },
+            "part2": {
+              "1": {
+                "a": "S",
+                "b": "Đ",
+                "c": "Đ",
+                "d": "Đ"
+              },
+              "2": {
+                "a": "ĐS",
+                "b": "Đ",
+                "c": "S",
+                "d": "S"
+              }
+            },
+            "part3": {
+              "1": {
+                "raw_string": "1423",
+                "normalized_value": 1423.0,
+                "is_valid": true,
+                "anomalies": [],
+                "digits": [
+                  [
+                    "1"
+                  ],
+                  [
+                    "4"
+                  ],
+                  [
+                    "2"
+                  ],
+                  [
+                    "3"
+                  ]
+                ]
+              },
+              "2": {
+                "raw_string": "3421",
+                "normalized_value": 3421.0,
+                "is_valid": true,
+                "anomalies": [],
+                "digits": [
+                  [
+                    "3"
+                  ],
+                  [
+                    "4"
+                  ],
+                  [
+                    "2"
+                  ],
+                  [
+                    "1"
+                  ]
+                ]
+              },
+              "3": {
+                "raw_string": "100_",
+                "normalized_value": 100.0,
+                "is_valid": true,
+                "anomalies": [],
+                "digits": [
+                  [
+                    "1"
+                  ],
+                  [
+                    "0"
+                  ],
+                  [
+                    "0"
+                  ],
+                  []
+                ]
+              },
+              "4": {
+                "raw_string": "2___",
+                "normalized_value": 2.0,
+                "is_valid": true,
+                "anomalies": [],
+                "digits": [
+                  [
+                    "2"
+                  ],
+                  [],
+                  [],
+                  []
+                ]
+              }
+            }
+          },
+          "submission_id": "99084c99",
+          "original_filename": "1793866051213_1554388614628998194_1096305833999352470_83287a77a34db5785e8410a4e215d9c4.jpg"
+        },
+        "bf9eab0f": {
+          "file_name": "1793866081422_1554388614628998194_1096305833999352470_19829599b260503fbd10b8c8e0971202.jpg",
+          "sbd": "[97][89][97][79][79][82][97][87]",
+          "exam_code": "0504",
+          "raw_exam_code": "0504",
+          "status": "NEEDS_REVIEW",
+          "anomalies": [
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 1 tô đúp (9 và 7)"
+            },
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 2 tô đúp (8 và 9)"
+            },
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 3 tô đúp (9 và 7)"
+            },
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 4 tô đúp (7 và 9)"
+            },
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 5 tô đúp (7 và 9)"
+            },
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 6 tô đúp (8 và 2)"
+            },
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 7 tô đúp (9 và 7)"
+            },
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 8 tô đúp (8 và 7)"
+            },
+            {
+              "type": "MISSING_SBD",
+              "msg": "Số báo danh chưa rõ ràng ([97][89][97][79][79][82][97][87])"
+            }
+          ],
+          "scores": {
+            "status": "NEEDS_REVIEW",
+            "p1": 1.25,
+            "p2": 0.0,
+            "p3": 0.0,
+            "total": 1.25
+          },
+          "details": {
+            "part1": {
+              "1": "B",
+              "2": "C",
+              "3": "A",
+              "4": "A",
+              "5": "C",
+              "6": "D",
+              "7": "C",
+              "8": "B",
+              "9": "D",
+              "10": "A",
+              "11": "C",
+              "12": "B",
+              "13": "D",
+              "14": "D",
+              "15": "B",
+              "16": "D",
+              "17": "",
+              "18": ""
+            },
+            "part2": {},
+            "part3": {}
+          },
+          "submission_id": "bf9eab0f",
+          "original_filename": "1793866081422_1554388614628998194_1096305833999352470_19829599b260503fbd10b8c8e0971202.jpg"
+        },
+        "40b22e33": {
+          "file_name": "1793866080087_1554388614628998194_1096305833999352470_d9fe1b085271a3e428c9850b72647b36.jpg",
+          "sbd": "[98][98][98]?[98][98][98][89]",
+          "exam_code": "0504",
+          "raw_exam_code": "0504",
+          "status": "NEEDS_REVIEW",
+          "anomalies": [
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 1 tô đúp (9 và 8)"
+            },
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 2 tô đúp (9 và 8)"
+            },
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 3 tô đúp (9 và 8)"
+            },
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 5 tô đúp (9 và 8)"
+            },
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 6 tô đúp (9 và 8)"
+            },
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 7 tô đúp (9 và 8)"
+            },
+            {
+              "type": "SBD_DOUBLE_FILL",
+              "msg": "SBD Cột 8 tô đúp (8 và 9)"
+            },
+            {
+              "type": "MISSING_SBD",
+              "msg": "Số báo danh chưa rõ ràng ([98][98][98]?[98][98][98][89])"
+            }
+          ],
+          "scores": {
+            "status": "NEEDS_REVIEW",
+            "p1": 0.25,
+            "p2": 0.0,
+            "p3": 0.0,
+            "total": 0.25
+          },
+          "details": {
+            "part1": {
+              "1": "C",
+              "2": "C",
+              "3": "B",
+              "4": "C",
+              "5": "D",
+              "6": "D",
+              "7": "B",
+              "8": "B",
+              "9": "C",
+              "10": "A",
+              "11": "D",
+              "12": "C",
+              "13": "C",
+              "14": "D",
+              "15": "C",
+              "16": "A",
+              "17": "",
+              "18": ""
+            },
+            "part2": {},
+            "part3": {}
+          },
+          "submission_id": "40b22e33",
+          "original_filename": "1793866080087_1554388614628998194_1096305833999352470_d9fe1b085271a3e428c9850b72647b36.jpg"
         }
       },
       "created_at": "05/11/2026 16:44"
