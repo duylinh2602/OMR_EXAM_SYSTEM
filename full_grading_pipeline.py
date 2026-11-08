@@ -331,20 +331,15 @@ class FullGradingPipeline:
         else:
             exam_code = detected_made
 
-        # 3. XÁC ĐỊNH PHẠM VI CÂU HỎI
+        # 3. XÁC ĐỊNH PHẠM VI CÂU HỎI (KẾ THỪA CẤU TRÚC ĐỢT THI, KHÔNG BAO GIỜ BỎ SÓT PHẦN II, III)
         key_dict = self.answer_keys.get(exam_code, {}) if exam_code else {}
-        if key_dict:
-            active_p1 = {int(q) for q in key_dict.get("part1", {}).keys()}
-            active_p2 = {int(q) for q in key_dict.get("part2", {}).keys()}
-            active_p3 = {int(q) for q in key_dict.get("part3", {}).keys()}
-        elif self.answer_keys:
-            active_p1 = set().union(*[{int(q) for q in k.get("part1", {}).keys()} for k in self.answer_keys.values()])
-            active_p2 = set().union(*[{int(q) for q in k.get("part2", {}).keys()} for k in self.answer_keys.values()])
-            active_p3 = set().union(*[{int(q) for q in k.get("part3", {}).keys()} for k in self.answer_keys.values()])
-        else:
-            active_p1 = set(range(1, 17))
-            active_p2 = set(range(1, 3))
-            active_p3 = set(range(1, 4))
+        global_p1 = set().union(*[{int(q) for q in k.get("part1", {}).keys()} for k in self.answer_keys.values()]) if self.answer_keys else set()
+        global_p2 = set().union(*[{int(q) for q in k.get("part2", {}).keys()} for k in self.answer_keys.values()]) if self.answer_keys else set()
+        global_p3 = set().union(*[{int(q) for q in k.get("part3", {}).keys()} for k in self.answer_keys.values()]) if self.answer_keys else set()
+
+        active_p1 = {int(q) for q in key_dict.get("part1", {}).keys()} if key_dict.get("part1") else (global_p1 or set(range(1, 17)))
+        active_p2 = {int(q) for q in key_dict.get("part2", {}).keys()} if key_dict.get("part2") else (global_p2 or set(range(1, 3)))
+        active_p3 = {int(q) for q in key_dict.get("part3", {}).keys()} if key_dict.get("part3") else (global_p3 or set(range(1, 5)))
 
         # 4. QUÉT PHẦN I (TRẮC NGHIỆM 4 LỰA CHỌN)
         p1_res = {}

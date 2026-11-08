@@ -160,14 +160,57 @@ def find_adaptive_4_corners(cands: List[Tuple[float, ...]], w: int, h: int) -> O
     return best_quad
 
 
+def _eval_orientation_asymmetry(gray: np.ndarray, corners: np.ndarray) -> float:
+    """
+    Đo lường độ bất đối xứng của các cặp mốc chuẩn dọc trục Y (chuẩn Bộ GD&ĐT 2025).
+    Đặc tính bất biến:
+    - M2 (Đầu Phần II) tại Y = 1371.1 (54.3% chiều cao) trên cả 2 lề trái và phải.
+    - M1 (Đầu Phần I) tại Y = 819.2 (32.4%).
+    - M3 (Đầu Phần III) tại Y = 1723.7 (68.2%).
+    Nếu ảnh đúng chiều (0°), toạ độ M1, M2, M3 ánh xạ vào đúng các ô vuông đen.
+    Nếu ảnh bị xoay ngược 180°, M2 rơi vào khoảng giấy trắng tinh (Y = 1154.9).
+    """
+    tpl_corners = np.array([
+        TPL_LEFT_5[0], TPL_RIGHT_5[0],
+        TPL_RIGHT_5[4], TPL_LEFT_5[4]
+    ], dtype=np.float32)
+
+    H = cv2.getPerspectiveTransform(tpl_corners, corners)
+    test_pts = np.array([
+        TPL_LEFT_5[1],   # M1 Trái
+        TPL_RIGHT_5[1],  # M1 Phải
+        TPL_LEFT_5[2],   # M2 Trái (Khóa bất đối xứng chính)
+        TPL_RIGHT_5[2],  # M2 Phải (Khóa bất đối xứng chính)
+        TPL_LEFT_5[3],   # M3 Trái
+        TPL_RIGHT_5[3],  # M3 Phải
+    ], dtype=np.float32).reshape(1, -1, 2)
+
+    mapped_pts = cv2.perspectiveTransform(test_pts, H)[0]
+    h, w = gray.shape
+    score = 0.0
+    r = max(5, int(round(min(h, w) * 0.012)))
+
+    for i, (mx, my) in enumerate(mapped_pts):
+        ix, iy = int(round(mx)), int(round(my))
+        if r <= ix < w - r and r <= iy < h - r:
+            patch = gray[iy - r : iy + r + 1, ix - r : ix + r + 1]
+            if np.min(patch) < 105 and (patch < 115).sum() > (r * r * 0.35):
+                weight = 3.0 if (i == 2 or i == 3) else 1.0  # M2 mang trọng số quyết định
+                score += weight
+    return score
+
+
 def auto_orient_sheet_robust(image_bgr: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
     """
     Tự động phát hiện hướng chụp và xoay đúng chiều đứng (0°).
-    Kiểm tra cả 4 góc vuông (0°, 90°, 180°, 270°).
+    Kiểm tra cả 4 góc vuông (0°, 90°, 180°, 270°) và chọn góc có độ tương thích
+    mốc bất đối xứng Y cao nhất.
     """
     raw_h, raw_w = image_bgr.shape[:2]
-    test_angles = [0, 90, 180, 270] if raw_h >= raw_w else [90, 270, 0, 180]
+    # Ưu tiên góc dọc tự nhiên trước, sau đó là góc ngang
+    test_angles = [0, 180, 90, 270] if raw_h >= raw_w else [90, 270, 0, 180]
 
+    valid_candidates = []
     for angle in test_angles:
         rotated = rotate_cardinal(image_bgr, angle)
         cur_gray = cv2.cvtColor(rotated, cv2.COLOR_BGR2GRAY)
@@ -176,23 +219,19 @@ def auto_orient_sheet_robust(image_bgr: np.ndarray) -> Tuple[np.ndarray, Optiona
         corners = find_adaptive_4_corners(cands, cur_w, cur_h)
 
         if corners is not None:
-            # Kiểm tra chiều đứng: phần đầu đề thi (chứa SBD & Mã đề) luôn có nhiều mực đen hơn phần chân
-            tl, tr, br, bl = corners
-            min_y = int(min(tl[1], tr[1]))
-            max_y = int(max(bl[1], br[1]))
-            sheet_h = max_y - min_y
-            if sheet_h > 100:
-                top_part = cur_gray[min_y : min_y + int(sheet_h * 0.3), :]
-                bot_part = cur_gray[max_y - int(sheet_h * 0.3) : max_y, :]
-                top_ink = np.sum(top_part < 100)
-                bot_ink = np.sum(bot_part < 100)
-                if top_ink >= bot_ink * 0.70:
-                    if angle != 0:
-                        print(f"[OK] Phat hien anh xoay {angle} do -> Da xoay ve chieu dung (0 do).")
-                    return rotated, corners
+            score = _eval_orientation_asymmetry(cur_gray, corners)
+            valid_candidates.append((score, angle, rotated, corners))
+
+    if valid_candidates:
+        # Sắp xếp theo điểm bất đối xứng mốc giảm dần
+        valid_candidates.sort(key=lambda c: c[0], reverse=True)
+        best_score, best_angle, best_rot, best_corners = valid_candidates[0]
+
+        if best_angle != 0:
+            print(f"[OK] Phát hiện ảnh xoay {best_angle}° (Điểm mốc M1-M3: {best_score:.1f}) -> Đã xoay về đúng chiều đứng (0°).")
+        return best_rot, best_corners
 
     return image_bgr, None
-
 
 def detect_fiducial_markers_legacy(gray: np.ndarray) -> Tuple[List[Tuple[float, ...]], List[Tuple[float, ...]], List[Tuple[float, float]]]:
     """Hàm quét mốc phẳng nguyên bản (dành cho bản scan máy tính)."""

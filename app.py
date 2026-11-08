@@ -858,8 +858,14 @@ async def smart_paste_answer_key(payload: SmartPasteRequest):
         elif "config" not in exam["exam_data"]:
             exam["exam_data"]["config"] = parsed_result.get("config", {"part1_max": 18, "part2_max": 4, "part3_max": 6})
 
-        # Cập nhật các mã đề mới parsed vào answer_keys
-        exam["exam_data"]["answer_keys"].update(parsed_keys)
+        # Cập nhật các mã đề mới parsed vào answer_keys (merge từng phần, không xóa Phần II, III)
+        for code, new_k in parsed_keys.items():
+            if code not in exam["exam_data"]["answer_keys"]:
+                exam["exam_data"]["answer_keys"][code] = new_k
+            else:
+                for part in ["part1", "part2", "part3"]:
+                    if new_k.get(part):
+                        exam["exam_data"]["answer_keys"][code][part] = new_k[part]
         exam["exam_info"]["is_configured"] = True
 
         pipeline = FullGradingPipeline(exam_data=exam["exam_data"])
