@@ -130,7 +130,7 @@
     <!-- ----------------------------------------------------------------------- -->
     <div id="tabScanner" class="tab-content active relative flex-1 w-full flex-col items-center justify-between overflow-hidden">
       <!-- Thẻ video với muted playsinline bắt buộc để autoplay trên mobile -->
-      <video id="videoElement" autoplay playsinline muted class="absolute w-full h-full object-cover"></video>
+      <video id="videoElement" autoplay playsinline muted class="absolute inset-0 w-full h-full object-cover bg-black z-0"></video>
 
       <!-- SUB-HEADER HƯỚNG DẪN QUÉT (ĐỎ KHI CHƯA KHÓA PHIẾU, XANH LÁ KHI ĐÃ KHÓA) -->
       <div class="w-full bg-slate-950/80 backdrop-blur px-4 py-2 border-b border-slate-800 shrink-0 text-center z-20">
@@ -147,7 +147,15 @@
       <div class="flex-1 w-full flex items-center justify-center relative pointer-events-none my-1">
         <div id="viewfinder" class="relative w-[92%] max-w-[380px] aspect-[1/1.444] border-2 border-dashed border-rose-500/80 rounded-2xl viewfinder-mask transition-all duration-150 flex flex-col justify-between p-1 overflow-hidden">
           <!-- Canvas AR Overlay bám mục tiêu thời gian thực đè khít bên trong viewfinder -->
-          <canvas id="overlayCanvas" class="absolute inset-0 w-full h-full pointer-events-none z-15 rounded-2xl"></canvas>
+          <canvas id="overlayCanvas" class="absolute inset-0 w-full h-full pointer-events-none rounded-2xl" style="background: transparent; pointer-events: none; z-index: 15;"></canvas>
+
+          <!-- NÚT MỞ KHÓA CAMERA NẾU BỊ TRÌNH DUYỆT CHẶN AUTOPLAY HOẶC ĐEN MÀN HÌNH -->
+          <div id="cameraUnblockBtn" class="hidden absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-xs pointer-events-auto">
+            <button onclick="userActivateCamera()" class="px-5 py-3 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-black rounded-2xl shadow-2xl flex items-center gap-2 border-2 border-white animate-bounce text-xs">
+              <span class="text-lg">📷</span>
+              <span>Bấm để bật Camera</span>
+            </button>
+          </div>
 
           <!-- 4 Khung ngắm góc Bracket -->
           <div id="reticle-tl" class="target-corner corner-tl unmatched"></div>
@@ -430,6 +438,8 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
     let isTorchOn = false;
     let toastTimer = null;
     let sessionRetryTimer = null;
+    let sessionRetryCount = 0;
+    let cameraWatchdogTimer = null;
 
     let sessionData = {
       active_exam_id: null,
@@ -597,11 +607,22 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
       const dot = document.getElementById("serverStatusDot");
       const statusText = document.getElementById("serverStatusText");
 
+      if (sessionRetryTimer) {
+        clearTimeout(sessionRetryTimer);
+        sessionRetryTimer = null;
+      }
+
+      // Timeout 8 giây với AbortController chống treo request khi Render cold-start
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
       try {
-        const res = await fetch("/api/session");
+        const res = await fetch("/api/session", { signal: controller.signal });
+        clearTimeout(timeoutId);
         if (!res.ok) throw new Error("HTTP " + res.status);
         
         sessionData = await res.json();
+        sessionRetryCount = 0;
         
         const count = sessionData.submissions ? sessionData.submissions.length : 0;
         document.getElementById("badgeSubCount").innerText = `${count} bài`;
@@ -609,7 +630,10 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
         if (sessionData.exam_info) {
           const title = `${sessionData.exam_info.subject} - LỚP ${sessionData.exam_info.class_name}`;
           document.getElementById("headerExamTitle").innerText = title;
-          document.getElementById("headerExamSubtitle").innerText = `Học kỳ: ${sessionData.exam_info.period}`;
+          document.getElementById("headerExamSubtitle").innerHTML = `
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+            <span>Học kỳ: ${sessionData.exam_info.period}</span>
+          `;
 
           document.getElementById("cardExamSubject").innerText = `${sessionData.exam_info.subject} (${sessionData.exam_info.class_name})`;
           document.getElementById("cardExamDetails").innerText = `Kỳ thi: ${sessionData.exam_info.period} | Năm học: ${sessionData.exam_info.school_year}`;
@@ -625,14 +649,30 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
           statusBadge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800";
         }
 
-        if (sessionRetryTimer) {
-          clearTimeout(sessionRetryTimer);
-          sessionRetryTimer = null;
-        }
-
       } catch (err) {
-        if (dot) dot.className = "w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping";
-        if (statusText) statusText.innerText = "Đang kết nối lại máy chủ...";
+        clearTimeout(timeoutId);
+        sessionRetryCount++;
+
+        if (dot && statusText) {
+          if (err.name === "AbortError") {
+            // Timeout do server Render đang thức dậy (cold-start)
+            dot.className = "w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping inline-block";
+            statusText.innerHTML = `⏳ Máy chủ đang khởi động (~30-50s)... Lần ${sessionRetryCount} <button onclick="fetchSessionWithRetry()" class="underline font-bold text-amber-300 ml-1">Thử lại</button>`;
+          } else if (err.message && err.message.startsWith("HTTP")) {
+            // Lỗi HTTP 500/502
+            dot.className = "w-1.5 h-1.5 rounded-full bg-rose-500 inline-block";
+            statusText.innerHTML = `Lỗi máy chủ (${err.message}) <button onclick="fetchSessionWithRetry()" class="underline font-bold text-rose-300 ml-1">Thử lại</button>`;
+          } else {
+            // Lỗi mạng chung
+            if (sessionRetryCount >= 3) {
+              dot.className = "w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping inline-block";
+              statusText.innerHTML = `⏳ Máy chủ đang khởi động (~30-50s)... Lần ${sessionRetryCount} <button onclick="fetchSessionWithRetry()" class="underline font-bold text-amber-300 ml-1">Thử lại</button>`;
+            } else {
+              dot.className = "w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping inline-block";
+              statusText.innerHTML = `Đang kết nối máy chủ... (Lần ${sessionRetryCount})`;
+            }
+          }
+        }
         sessionRetryTimer = setTimeout(fetchSessionWithRetry, 3500);
       }
     }
@@ -653,13 +693,15 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
       }
 
       const video = document.getElementById("videoElement");
+      if (!video) return;
+
       video.muted = true;
       video.setAttribute("autoplay", "");
       video.setAttribute("playsinline", "");
       video.setAttribute("muted", "");
 
+      // Cấu hình camera tối ưu, tương thích 100% Android Chrome & Xiaomi
       const constraintCandidates = [
-        { video: { facingMode: { ideal: facingMode }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false },
         { video: { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
         { video: { facingMode: facingMode }, audio: false },
         { video: true, audio: false }
@@ -679,7 +721,9 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
 
       if (!stream) {
         console.warn("Camera getUserMedia failed:", lastErr);
-        showNotificationToast("Không mở được camera trực tiếp. Hãy bấm 'Chụp máy gốc'!", true);
+        const unblockBtn = document.getElementById("cameraUnblockBtn");
+        if (unblockBtn) unblockBtn.classList.remove("hidden");
+        showNotificationToast("Không mở được camera trực tiếp. Hãy bấm 'Bật Camera' hoặc 'Chụp máy gốc'!", true);
         return;
       }
 
@@ -687,24 +731,19 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
         currentStream = stream;
         video.srcObject = stream;
         videoTrack = stream.getVideoTracks()[0];
-        if (videoTrack && videoTrack.applyConstraints) {
-          try {
-            await videoTrack.applyConstraints({
-              advanced: [
-                { focusMode: "continuous" },
-                { exposureMode: "continuous" }
-              ]
-            });
-          } catch (e) {
-            // Thiết bị không hỗ trợ advanced focusMode sẽ bỏ qua an toàn
-          }
-        }
+
+        // TUYỆT ĐỐI KHÔNG GỌI videoTrack.applyConstraints({ advanced: [focusMode, exposureMode] })
+        // vì gây đen camera trên phần cứng Chrome Android / Xiaomi
 
         video.onloadedmetadata = async () => {
           try {
             await video.play();
+            const unblockBtn = document.getElementById("cameraUnblockBtn");
+            if (unblockBtn && video.videoWidth > 0 && !video.paused) {
+              unblockBtn.classList.add("hidden");
+            }
           } catch (e) {
-            console.warn("Video play error on metadata:", e);
+            console.warn("Video play error on loadedmetadata:", e);
           }
         };
 
@@ -712,6 +751,43 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
       } catch (e) {
         console.warn("Video play initial warning:", e);
       }
+
+      // CAMERA WATCHDOG (2.5 giây): Kiểm tra nếu thẻ video chưa phát hình hoặc bị chặn autoplay
+      if (cameraWatchdogTimer) clearTimeout(cameraWatchdogTimer);
+      cameraWatchdogTimer = setTimeout(async () => {
+        const unblockBtn = document.getElementById("cameraUnblockBtn");
+        if (!video || video.videoWidth === 0 || video.paused) {
+          try {
+            await video.play();
+          } catch (e) {
+            console.warn("Autoplay policy blocked video, showing tap button:", e);
+          }
+          if (!video || video.videoWidth === 0 || video.paused) {
+            if (unblockBtn) unblockBtn.classList.remove("hidden");
+          } else {
+            if (unblockBtn) unblockBtn.classList.add("hidden");
+          }
+        } else {
+          if (unblockBtn) unblockBtn.classList.add("hidden");
+        }
+      }, 2500);
+    }
+
+    async function userActivateCamera() {
+      const video = document.getElementById("videoElement");
+      const unblockBtn = document.getElementById("cameraUnblockBtn");
+      if (unblockBtn) unblockBtn.classList.add("hidden");
+      if (video) {
+        try {
+          await video.play();
+          if (video.videoWidth > 0 && !video.paused) {
+            return;
+          }
+        } catch (e) {
+          console.warn("userActivateCamera play failed, re-running startCamera():", e);
+        }
+      }
+      await startCamera();
     }
 
     function switchCamera() {

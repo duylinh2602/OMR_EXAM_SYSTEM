@@ -244,6 +244,15 @@ class FullGradingPipeline:
         p2_path = resolve_data_path("output/part2_coordinates.json")
         p3_path = resolve_data_path("output/part3_coordinates.json")
 
+        # Tự phục hồi tọa độ nếu thiếu bất kỳ tệp nào, chống sập server lúc khởi động (Zero-Downtime Boot)
+        if not (header_coord_path.exists() and p1_path.exists() and p2_path.exists() and p3_path.exists()):
+            try:
+                from restore_coordinates import restore_all_coordinates
+                restore_all_coordinates(output_dir_param=header_coord_path.parent)
+                print("[INFO] Đã tự động khôi phục toàn bộ tệp tọa độ OMR.")
+            except Exception as e:
+                print(f"[WARN] Không thể tự phục hồi tọa độ OMR: {e}")
+
         if not header_coord_path.exists():
             raise FileNotFoundError(f"Chưa tìm thấy tệp tọa độ: {header_coord_path}")
 

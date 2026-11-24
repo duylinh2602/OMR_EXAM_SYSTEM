@@ -1,5 +1,5 @@
-// Service Worker cho OMR Mobile PWA
-const CACHE_NAME = 'omr-pwa-v7';
+// Service Worker cho OMR Mobile PWA (v8 - Network-First for Navigation)
+const CACHE_NAME = 'omr-pwa-v8';
 const ASSETS_TO_CACHE = [
   '/scanner',
   '/manifest.json',
@@ -25,24 +25,43 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Network-first strategy cho API và Static fallback
+// Xử lý fetch request
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Không cache các lệnh POST hoặc các endpoint API chấm thi
+  // Không can thiệp các request không phải GET hoặc các endpoint API
   if (event.request.method !== 'GET' || url.pathname.startsWith('/api/')) {
     return;
   }
 
+  // Đối với request điều hướng (Navigation / Scanner / Trang chủ): Luôn ưu tiên lấy bản mới nhất từ mạng (Network-First)
+  const isNavigation = event.request.mode === 'navigate' || url.pathname === '/scanner' || url.pathname === '/';
+  if (isNavigation) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const resClone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, resClone));
+          }
+          return response;
+        })
+        .catch(async () => {
+          const cached = await caches.match(event.request);
+          if (cached) return cached;
+          return caches.match('/scanner');
+        })
+    );
+    return;
+  }
+
+  // Đối với các tài nguyên tĩnh khác: Network-First với fallback cache
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Lưu bản cache cho các tài nguyên tĩnh
-        if (response.status === 200) {
+        if (response && response.status === 200) {
           const resClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, resClone);
-          });
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, resClone));
         }
         return response;
       })

@@ -383,6 +383,12 @@ async def get_pwa_icon(icon_name: str):
     return FileResponse(str(icon_path), media_type="image/png")
 
 
+@app.get("/api/health")
+async def health_check():
+    """Endpoint siêu nhẹ kiểm tra trạng thái thức/ngủ của server (Zero-Downtime Health Check)."""
+    return {"status": "ok", "timestamp": time.time()}
+
+
 @app.get("/api/session")
 async def get_session():
     exam = get_current_exam()

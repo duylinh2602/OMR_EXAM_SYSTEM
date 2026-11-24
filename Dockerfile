@@ -21,6 +21,6 @@ COPY . .
 RUN mkdir -p output/web_uploads output/graded_sheets && \
     chmod -R 777 output
 
-EXPOSE 7860
+EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT:-7860}"]
+CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}"]
