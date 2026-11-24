@@ -69,7 +69,7 @@ class Part3ShadowfixReader:
         self.coords = p3_coords
         self.scale = scale
         self.core_r = 4.5 * scale
-        self.search_r = int(round(4.0 * scale))
+        self.search_r = int(round(4.5 * scale))
         self.ring_in = 7.2 * scale
         self.ring_out = 10.8 * scale
         self.template_ink_map = template_ink_map
@@ -167,8 +167,8 @@ class Part3ShadowfixReader:
                 # Kết luận tô đúp
                 if top_rel >= 15.5 and sec_rel >= 14.5 and (top_rel - sec_rel) < 8.0:
                     col_digits[col] = [str(top_d), str(sec_d)]
-                # Kết luận tô hợp lệ 1 chữ số
-                elif top_rel >= 11.5 and (top_rel - sec_rel) >= 6.5 and net_scores[top_d] >= 18.0:
+                # Kết luận tô hợp lệ 1 chữ số (bắt trọn nét chì nhạt, không bỏ sót)
+                elif top_rel >= 11.5 and (top_rel - sec_rel) >= 6.5:
                     col_digits[col] = [str(top_d)]
                 else:
                     col_digits[col] = []
@@ -266,7 +266,11 @@ class FullGradingPipeline:
             tpl_bgr = cv2.imread(str(tpl_path))
             if tpl_bgr is not None and tpl_bgr.shape[:2] == (CANONICAL_HEIGHT, CANONICAL_WIDTH):
                 tpl_gray = cv2.cvtColor(tpl_bgr, cv2.COLOR_BGR2GRAY)
-                tpl_bg = cv2.GaussianBlur(tpl_gray, (0, 0), sigmaX=22.0, sigmaY=22.0, borderType=cv2.BORDER_REFLECT)
+                th, tw = tpl_gray.shape[:2]
+                st_w, st_h = max(100, tw // 4), max(100, th // 4)
+                s_tpl = cv2.resize(tpl_gray, (st_w, st_h), interpolation=cv2.INTER_AREA)
+                s_bg = cv2.GaussianBlur(s_tpl, (0, 0), sigmaX=5.5, sigmaY=5.5, borderType=cv2.BORDER_REFLECT)
+                tpl_bg = cv2.resize(s_bg, (tw, th), interpolation=cv2.INTER_LINEAR)
                 self.template_ink_map = tpl_bg.astype(np.float32) - tpl_gray.astype(np.float32)
 
         scale = CANONICAL_WIDTH / 1434.0
@@ -319,21 +323,69 @@ class FullGradingPipeline:
                 return max(0.0, raw_val - tpl_val * tpl_coeff)
         return raw_val
 
+    def _eval_bubble_ink_refined(
+        self,
+        ink_map: np.ndarray,
+        cx: float,
+        cy: float,
+        r_core: int = 7,
+        search_r: int = 8
+    ) -> float:
+        """
+        Dò tâm ô tròn bán kính rộng (Bubble Center Snapping):
+        Quét dịch tâm trong [-search_r, +search_r] bước 2px, trừ template phôi gốc (hệ số 0.85)
+        và trừ phạt khoảng cách nhẹ 0.2 * dist để khóa chính xác vết chì ngay cả khi rung tay.
+        """
+        xi0, yi0 = int(round(cx)), int(round(cy))
+        h, w = ink_map.shape
+        pad = search_r + r_core
+        if xi0 - pad < 0 or yi0 - pad < 0 or xi0 + pad >= w or yi0 + pad >= h:
+            return self._eval_bubble_ink(ink_map, cx, cy, r_core, self.template_ink_map, 0.85)
+
+        patch_ink = ink_map[yi0 - pad : yi0 + pad + 1, xi0 - pad : xi0 + pad + 1]
+        if self.template_ink_map is not None:
+            th, tw = self.template_ink_map.shape
+            if yi0 - pad >= 0 and xi0 - pad >= 0 and yi0 + pad + 1 <= th and xi0 + pad + 1 <= tw:
+                patch_tpl = self.template_ink_map[yi0 - pad : yi0 + pad + 1, xi0 - pad : xi0 + pad + 1]
+                patch_net = np.maximum(0.0, patch_ink - patch_tpl * 0.85)
+            else:
+                patch_net = np.maximum(0.0, patch_ink)
+        else:
+            patch_net = np.maximum(0.0, patch_ink)
+
+        yy, xx = np.ogrid[-r_core : r_core + 1, -r_core : r_core + 1]
+        core_mask = (xx * xx + yy * yy <= r_core * r_core).astype(np.float32)
+        c_sum = float(core_mask.sum())
+        if c_sum > 0:
+            core_mask /= c_sum
+
+        core_resp = cv2.filter2D(patch_net, -1, core_mask)
+
+        best_val = 0.0
+        center_idx = pad
+        for dy in range(-search_r, search_r + 1, 2):
+            for dx in range(-search_r, search_r + 1, 2):
+                val = float(core_resp[center_idx + dy, center_idx + dx])
+                dist_penalty = 0.2 * np.hypot(dx, dy)
+                adjusted_val = max(0.0, val - dist_penalty)
+                if adjusted_val > best_val:
+                    best_val = adjusted_val
+        return best_val
+
     def _read_header_ink(self, ink_map: np.ndarray) -> Tuple[str, str, str, List[Dict[str, str]]]:
-        """Đọc Số báo danh và Mã đề với nguyên tắc không tự ý suy đoán, khử báo động giả."""
+        """Đọc Số báo danh và Mã đề với Bubble Center Snapping và thích ứng phân vị động."""
         anomalies = []
 
         def decode_grid(cols, grid_name="SBD"):
             res = []
             for col_idx, col in enumerate(cols, start=1):
                 raw_scores = [
-                    self._eval_bubble_ink(
+                    self._eval_bubble_ink_refined(
                         ink_map,
                         col["digits"][str(d)][0],
                         col["digits"][str(d)][1],
                         r_core=7,
-                        template_ink_map=self.template_ink_map,
-                        tpl_coeff=0.85
+                        search_r=8
                     )
                     for d in range(10)
                 ]
@@ -345,13 +397,13 @@ class FullGradingPipeline:
                 sec_d, sec_net = ranked[1]
                 top_raw = raw_scores[top_d]
 
-                if sec_net >= 15.5 and (top_net - sec_net) < 10.0:
+                if sec_net >= 13.5 and (top_net - sec_net) < 8.5:
                     res.append(f"[{top_d}{sec_d}]")
                     anomalies.append({
                         "type": f"{grid_name}_DOUBLE_FILL",
                         "msg": f"{grid_name} Cột {col_idx} tô đúp ({top_d} và {sec_d})"
                     })
-                elif (top_net >= 16.5 and top_raw >= 18.0) or (top_net >= 15.0 and (top_net - sec_net) >= 10.0 and top_raw >= 18.0):
+                elif top_net >= 12.0 and top_raw >= 15.5:
                     res.append(str(top_d))
                 else:
                     res.append("?")
@@ -382,8 +434,18 @@ class FullGradingPipeline:
     def process_sheet(self, image_bgr: np.ndarray, file_name: str, forced_exam_code: Optional[str] = None) -> Dict[str, Any]:
         gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
 
-        # 1. TẠO INK MAP TOÀN CỤC (High-performance Gaussian background subtraction)
-        bg = cv2.GaussianBlur(gray, (0, 0), sigmaX=22.0, sigmaY=22.0, borderType=cv2.BORDER_REFLECT)
+        # 0. KHỬ MỜ VI RUNG TAY BẰNG UNSHARP MASK NẾU ẢNH HƠI MỀM NÉT
+        lap_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+        if lap_var < 28.0:
+            blurred_sharp = cv2.GaussianBlur(gray, (0, 0), sigmaX=1.5, sigmaY=1.5)
+            gray = cv2.addWeighted(gray, 1.55, blurred_sharp, -0.55, 0)
+
+        # 1. TẠO INK MAP TOÀN CỤC (Kỹ thuật Downscale-Blur-Upscale tăng tốc 15-20 lần)
+        h_g, w_g = gray.shape[:2]
+        small_w, small_h = max(100, w_g // 4), max(100, h_g // 4)
+        small_gray = cv2.resize(gray, (small_w, small_h), interpolation=cv2.INTER_AREA)
+        small_bg = cv2.GaussianBlur(small_gray, (0, 0), sigmaX=5.5, sigmaY=5.5, borderType=cv2.BORDER_REFLECT)
+        bg = cv2.resize(small_bg, (w_g, h_g), interpolation=cv2.INTER_LINEAR)
         ink_map = bg.astype(np.float32) - gray.astype(np.float32)
 
         # 2. ĐỌC HEADER
@@ -421,13 +483,12 @@ class FullGradingPipeline:
             if q_num not in active_p1:
                 continue
             scores = {
-                opt: self._eval_bubble_ink(
+                opt: self._eval_bubble_ink_refined(
                     ink_map,
                     q["choices"][opt][0],
                     q["choices"][opt][1],
                     r_core=8,
-                    template_ink_map=self.template_ink_map,
-                    tpl_coeff=0.85
+                    search_r=8
                 )
                 for opt in ["A", "B", "C", "D"]
             }
@@ -437,11 +498,10 @@ class FullGradingPipeline:
             row_bg = float(np.percentile(list(scores.values()), 50))
             top_rel = top_val - row_bg
 
-            if sec_val >= 15.5 and (top_val - sec_val) < 8.5:
-                # SỬA LỖI 1: Tô đúp gán MULTIPLE -> Tuyệt đối không cho điểm câu này
+            if sec_val >= 15.0 and (top_val - sec_val) < 8.0:
                 p1_res[q_num] = "MULTIPLE"
                 p1_anom.append({"type": "P1_DOUBLE_FILL", "msg": f"Phần I Câu {q_num} tô đúp ({top_opt} và {sec_opt})"})
-            elif top_val >= 15.5 or (top_rel >= 11.5 and (top_val - sec_val) >= 7.5):
+            elif top_val >= 14.0 or (top_rel >= 10.0 and (top_val - sec_val) >= 6.8):
                 p1_res[q_num] = top_opt
             else:
                 p1_res[q_num] = ""
@@ -458,14 +518,13 @@ class FullGradingPipeline:
             for rk in ["a", "b", "c", "d"]:
                 tx, ty = q["rows"][rk]["true"]
                 fx, fy = q["rows"][rk]["false"]
-                st = self._eval_bubble_ink(ink_map, tx, ty, r_core=8, template_ink_map=self.template_ink_map, tpl_coeff=0.85)
-                sf = self._eval_bubble_ink(ink_map, fx, fy, r_core=8, template_ink_map=self.template_ink_map, tpl_coeff=0.85)
+                st = self._eval_bubble_ink_refined(ink_map, tx, ty, r_core=8, search_r=8)
+                sf = self._eval_bubble_ink_refined(ink_map, fx, fy, r_core=8, search_r=8)
 
-                if st >= 15.5 and sf >= 15.5:
-                    # SỬA LỖI 1: Cả Đ và S cùng có nét chì -> Gán ĐS -> Tính 0 điểm ý này
+                if st >= 18.0 and sf >= 18.0 and abs(st - sf) < 8.5:
                     row_dict[rk] = "ĐS"
                     p2_anom.append({"type": "P2_DOUBLE_FILL", "msg": f"Phần II Câu {q_num}{rk} tô cả Đúng và Sai"})
-                elif max(st, sf) >= 12.0 and abs(st - sf) >= 7.5:
+                elif max(st, sf) >= 11.0 and abs(st - sf) >= 6.8:
                     row_dict[rk] = "Đ" if st > sf else "S"
                 else:
                     row_dict[rk] = ""

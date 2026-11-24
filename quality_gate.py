@@ -10,8 +10,8 @@ import numpy as np
 
 
 class ImageQualityAssessment:
-    # Ngưỡng Laplacian Variance tối thiểu để không bị mờ nhòe (Motion Blur)
-    BLUR_THRESHOLD: float = 60.0
+    # Ngưỡng Laplacian Variance tối thiểu để không bị mờ nhòe nát (Handheld Motion Blur Gate)
+    BLUR_THRESHOLD: float = 6.0
     # Độ tương phản tối thiểu (độ lệch chuẩn độ xám toàn trang)
     CONTRAST_MIN_STD: float = 18.0
     # Độ sáng trung bình tối thiểu và tối đa [40, 248]
@@ -32,8 +32,11 @@ class ImageQualityAssessment:
         h, w = image_bgr.shape[:2]
         gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
 
-        # 1. Đánh giá độ nét (Sharpness / Blur Detection) qua toán tử Laplacian
-        laplacian_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+        # 1. Đánh giá độ nét (Sharpness) trên vùng trung tâm 75% (loại bỏ nền bàn trơn kéo tụt điểm)
+        y0, y1 = int(round(0.12 * h)), int(round(0.88 * h))
+        x0, x1 = int(round(0.12 * w)), int(round(0.88 * w))
+        center_gray = gray[y0:y1, x0:x1] if (y1 > y0 and x1 > x0) else gray
+        laplacian_var = float(cv2.Laplacian(center_gray, cv2.CV_64F).var())
         is_sharp = laplacian_var >= cls.BLUR_THRESHOLD
 
         # 2. Đánh giá dải tương phản (Dynamic Range / Contrast)

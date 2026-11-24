@@ -145,7 +145,7 @@
 
       <!-- KHUNG NGẮM TỶ LỆ CHUẨN 4 MỐC M0 - M4 (1:1.444) - ĐỎ TUYỆT ĐỐI KHI CHƯA ĐỦ MỐC -->
       <div class="flex-1 w-full flex items-center justify-center relative pointer-events-none my-1">
-        <div id="viewfinder" class="relative w-[88%] max-w-[330px] aspect-[1/1.444] border-2 border-dashed border-rose-500/80 rounded-2xl viewfinder-mask transition-all duration-150 flex flex-col justify-between p-1 overflow-hidden">
+        <div id="viewfinder" class="relative w-[92%] max-w-[380px] aspect-[1/1.444] border-2 border-dashed border-rose-500/80 rounded-2xl viewfinder-mask transition-all duration-150 flex flex-col justify-between p-1 overflow-hidden">
           <!-- Canvas AR Overlay bám mục tiêu thời gian thực đè khít bên trong viewfinder -->
           <canvas id="overlayCanvas" class="absolute inset-0 w-full h-full pointer-events-none z-15 rounded-2xl"></canvas>
 
@@ -424,6 +424,7 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
     let opticalInterval = null;
     let lock4Frames = 0;
     let lastValidCornersNorm = null;
+    let lastCornersPos = null;
     let deferredPrompt = null;
     let latestSubId = null;
     let isTorchOn = false;
@@ -686,6 +687,18 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
         currentStream = stream;
         video.srcObject = stream;
         videoTrack = stream.getVideoTracks()[0];
+        if (videoTrack && videoTrack.applyConstraints) {
+          try {
+            await videoTrack.applyConstraints({
+              advanced: [
+                { focusMode: "continuous" },
+                { exposureMode: "continuous" }
+              ]
+            });
+          } catch (e) {
+            // Thiết bị không hỗ trợ advanced focusMode sẽ bỏ qua an toàn
+          }
+        }
 
         video.onloadedmetadata = async () => {
           try {
@@ -1012,14 +1025,14 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
         const avgW = (wTop + wBot) / 2;
         const avgH = (hLeft + hRight) / 2;
 
-        if (avgW >= 0.48 * W && avgH >= 0.48 * H) {
+        if (avgW >= 0.42 * W && avgH >= 0.42 * H) {
           const ratio = avgH / avgW;
-          if (ratio >= 1.12 && ratio <= 1.82) {
-            // Chênh lệch chiều dài 2 cạnh đối diện không vượt quá 18% (chặn tứ giác méo)
+          if (ratio >= 1.05 && ratio <= 1.92) {
+            // Chênh lệch chiều dài 2 cạnh đối diện cho phép tối đa 30% (chịu góc nghiêng tay)
             const maxW = Math.max(wTop, wBot);
             const maxH = Math.max(hLeft, hRight);
-            if ((Math.abs(wTop - wBot) / maxW <= 0.18) && (Math.abs(hLeft - hRight) / maxH <= 0.18)) {
-              // Kiểm tra tất cả 4 góc trong của tứ giác nằm trong khoảng [72°, 108°]
+            if ((Math.abs(wTop - wBot) / maxW <= 0.30) && (Math.abs(hLeft - hRight) / maxH <= 0.30)) {
+              // Kiểm tra tất cả 4 góc trong của tứ giác nằm trong khoảng [58°, 122°]
               const getAngleDeg = (p1, pCenter, p2) => {
                 const v1x = p1.x - pCenter.x, v1y = p1.y - pCenter.y;
                 const v2x = p2.x - pCenter.x, v2y = p2.y - pCenter.y;
@@ -1035,10 +1048,10 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
               const angBR = getAngleDeg(TR, BR, BL);
               const angBL = getAngleDeg(BR, BL, TL);
 
-              if (angTL >= 72 && angTL <= 108 &&
-                  angTR >= 72 && angTR <= 108 &&
-                  angBR >= 72 && angBR <= 108 &&
-                  angBL >= 72 && angBL <= 108) {
+              if (angTL >= 58 && angTL <= 122 &&
+                  angTR >= 58 && angTR <= 122 &&
+                  angBR >= 58 && angBR <= 122 &&
+                  angBL >= 58 && angBL <= 122) {
                 quadValid = true;
 
                 // Xác thực 3 cặp mốc trung gian: t = 0.324 (M1), 0.543 (M2), 0.682 (M3)
@@ -1075,12 +1088,8 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
                   }
                 });
 
-                // Điều kiện công nhận:
-                // - Phải khớp ít nhất 4/6 mốc trung gian
-                // - Cạnh trái tối thiểu 2/3 mốc
-                // - Cạnh phải tối thiểu 2/3 mốc
-                // - Bắt buộc có ít nhất 1 mốc M2 (t = 0.543)
-                if (matchedIntermediates.length >= 4 && matchedLeft >= 2 && matchedRight >= 2 && hasM2) {
+                // Điều kiện công nhận: khóa đủ 4 mốc góc + ít nhất 3/6 mốc cạnh (bắt buộc có ít nhất 1 mốc M2)
+                if (matchedIntermediates.length >= 3 && hasM2) {
                   isValidSheet = true;
                   // Chuẩn hóa tọa độ 4 góc hợp lệ theo kích thước video gốc (0.0 -> 1.0)
                   const normPt = (pt) => {
@@ -1097,6 +1106,28 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
             }
           }
         }
+      }
+
+      // Kiểm tra độ ổn định góc giữa 2 frame liên tiếp (độ dịch chuyển < 16px)
+      let isStable = false;
+      if (lastCornersPos && TL && TR && BR && BL) {
+        const dTL = Math.hypot(TL.x - lastCornersPos.TL.x, TL.y - lastCornersPos.TL.y);
+        const dTR = Math.hypot(TR.x - lastCornersPos.TR.x, TR.y - lastCornersPos.TR.y);
+        const dBR = Math.hypot(BR.x - lastCornersPos.BR.x, BR.y - lastCornersPos.BR.y);
+        const dBL = Math.hypot(BL.x - lastCornersPos.BL.x, BL.y - lastCornersPos.BL.y);
+        if (Math.max(dTL, dTR, dBR, dBL) < 16.0) {
+          isStable = true;
+        }
+      }
+      if (TL && TR && BR && BL) {
+        lastCornersPos = {
+          TL: { x: TL.x, y: TL.y },
+          TR: { x: TR.x, y: TR.y },
+          BR: { x: BR.x, y: BR.y },
+          BL: { x: BL.x, y: BL.y }
+        };
+      } else {
+        lastCornersPos = null;
       }
 
       // 6. Vẽ AR Overlay Canvas trực tiếp đè khít bên trong viewfinder
@@ -1151,10 +1182,10 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
       }
 
       // Cập nhật trạng thái giao diện UI & Tự động chụp
-      updateGuidanceState(isValidSheet, cornersCount, matchedIntermediates.length, TL, TR, BR, BL);
+      updateGuidanceState(isValidSheet, cornersCount, matchedIntermediates.length, TL, TR, BR, BL, isStable);
     }
 
-    function updateGuidanceState(isValidSheet, cornersCount, intermediatesCount, TL, TR, BR, BL) {
+    function updateGuidanceState(isValidSheet, cornersCount, intermediatesCount, TL, TR, BR, BL, isStable) {
       if (isGrading) return;
 
       const guideBox = document.getElementById("guidanceBox");
@@ -1176,12 +1207,17 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
       };
 
       if (isValidSheet) {
-        lock4Frames++;
-        if (viewfinder) viewfinder.className = "relative w-[88%] max-w-[330px] aspect-[1/1.444] border-2 border-emerald-400 rounded-2xl viewfinder-mask shadow-[0_0_28px_rgba(16,185,129,0.9)] transition-all flex flex-col justify-between p-1 overflow-hidden";
+        if (isStable) {
+          lock4Frames++;
+        } else {
+          lock4Frames = 1;
+        }
+
+        if (viewfinder) viewfinder.className = "relative w-[92%] max-w-[380px] aspect-[1/1.444] border-2 border-emerald-400 rounded-2xl viewfinder-mask shadow-[0_0_28px_rgba(16,185,129,0.9)] transition-all flex flex-col justify-between p-1 overflow-hidden";
         if (guideBox) guideBox.className = "text-center text-[11px] font-bold text-emerald-200 bg-emerald-950/95 px-4 py-1.5 rounded-full mx-auto shadow-xl border border-emerald-500 animate-pulse flex items-center gap-1.5 pointer-events-auto";
         if (guideIcon) guideIcon.innerText = "✓";
         if (guideBoxText) guideBoxText.innerText = "ĐÃ KHÓA ĐỦ HỆ THỐNG MỐC! ĐANG CHỤP...";
-        if (guideSubText) guideSubText.innerText = "Giữ chắc tay, hệ thống đang tự động chụp và chấm bài...";
+        if (guideSubText) guideSubText.innerText = "Giữ chắc tay, hệ thống đang chụp chớp nhoáng và chấm bài...";
 
         if (scanStatusTitle) scanStatusTitle.className = "text-xs font-bold text-emerald-400 flex items-center justify-center gap-1.5";
         if (scanPingDot) scanPingDot.className = "w-2 h-2 rounded-full bg-emerald-400 animate-ping";
@@ -1194,8 +1230,8 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
           if (el) { el.classList.remove("unmatched"); el.classList.add("matched"); }
         });
 
-        // Tự động chụp sau khi giữ ổn định 3 frame (~270ms)
-        if (lock4Frames >= 3) {
+        // Tự động kích hoạt chụp chớp nhoáng ngay sau 2 chu kỳ ổn định (~150ms)
+        if (lock4Frames >= 2) {
           playBeep(true);
           if (navigator.vibrate) navigator.vibrate([40, 60, 40]);
           executeGradingProcess();
@@ -1205,7 +1241,7 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
 
       // NẾU CHƯA ĐỦ ĐIỀU KIỆN: GIỮ MÀU ĐỎ TUYỆT ĐỐI!
       lock4Frames = 0;
-      if (viewfinder) viewfinder.className = "relative w-[88%] max-w-[330px] aspect-[1/1.444] border-2 border-dashed border-rose-500/80 rounded-2xl viewfinder-mask transition-all flex flex-col justify-between p-1 overflow-hidden";
+      if (viewfinder) viewfinder.className = "relative w-[92%] max-w-[380px] aspect-[1/1.444] border-2 border-dashed border-rose-500/80 rounded-2xl viewfinder-mask transition-all flex flex-col justify-between p-1 overflow-hidden";
       if (guideBox) guideBox.className = "text-center text-[11px] font-bold text-rose-200 bg-rose-950/90 px-3.5 py-1.5 rounded-full mx-auto shadow-xl border border-rose-500/60 transition-all flex items-center gap-1.5 pointer-events-auto";
       if (guideIcon) guideIcon.innerText = "🎯";
 
@@ -1241,7 +1277,7 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
     }
 
     // =========================================================================
-    // GỬI ẢNH LÊN MÁY CHỦ CHẤM THI (TỪ VIDEO CANVAS)
+    // CHỤP CHỚP NHOÁNG CHỌN KHUNG NÉT NHẤT (BEST-FRAME BURST CAPTURE CHỐNG RUNG TAY)
     // =========================================================================
     async function executeGradingProcess() {
       if (isGrading) return;
@@ -1259,19 +1295,94 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
       guideBox.className = "text-center text-[11px] font-bold text-amber-200 bg-amber-950/95 px-4 py-1.5 rounded-full mx-auto shadow-xl border border-amber-500 animate-pulse flex items-center gap-1.5 pointer-events-auto";
 
       const video = document.getElementById("videoElement");
-      const canvas = document.getElementById("captureCanvas");
-      canvas.width = video.videoWidth || 1920;
-      canvas.height = video.videoHeight || 1080;
-      canvas.getContext("2d").drawImage(video, 0, 0);
+      const vw = video.videoWidth || 1920;
+      const vh = video.videoHeight || 1080;
 
-      canvas.toBlob(async (blob) => {
+      // 1. Chụp nhanh 3 frame liên tiếp (cách nhau 40ms) và chọn frame sắc nét nhất (chống rung tay tức thời)
+      let bestCanvas = null;
+      let maxSharpness = -1;
+
+      for (let burstIdx = 0; burstIdx < 3; burstIdx++) {
+        const tempCanvas = document.createElement("canvas");
+        tempCanvas.width = vw;
+        tempCanvas.height = vh;
+        const tempCtx = tempCanvas.getContext("2d", { willReadFrequently: true });
+        tempCtx.drawImage(video, 0, 0, vw, vh);
+
+        // Tính nhanh chỉ số độ nét vi sai trên vùng trung tâm
+        let sharpness = 0;
+        try {
+          const sampleW = 140, sampleH = 140;
+          const sampleX = Math.round(vw * 0.5 - sampleW / 2);
+          const sampleY = Math.round(vh * 0.5 - sampleH / 2);
+          const sampleData = tempCtx.getImageData(sampleX, sampleY, sampleW, sampleH).data;
+          for (let i = 0; i < sampleData.length - 8; i += 8) {
+            sharpness += Math.abs(sampleData[i] - sampleData[i + 4]);
+          }
+        } catch (e) {
+          sharpness = burstIdx;
+        }
+
+        if (sharpness > maxSharpness || bestCanvas === null) {
+          maxSharpness = sharpness;
+          bestCanvas = tempCanvas;
+        }
+
+        if (burstIdx < 2) {
+          await new Promise(r => setTimeout(r, 40));
+        }
+      }
+
+      // 2. Cắt đúng vùng 4 góc phiếu mở rộng 7% an toàn, thu phóng cạnh dài nhất về max 1650px
+      const finalCanvas = document.getElementById("captureCanvas");
+      let cornersToSend = null;
+
+      if (lastValidCornersNorm && lastValidCornersNorm.length === 4) {
+        const xs = lastValidCornersNorm.map(p => p[0] * vw);
+        const ys = lastValidCornersNorm.map(p => p[1] * vh);
+        const minX = Math.min(...xs), maxX = Math.max(...xs);
+        const minY = Math.min(...ys), maxY = Math.max(...ys);
+        const bw = maxX - minX, bh = maxY - minY;
+        const margin = Math.max(bw, bh) * 0.07;
+
+        const cropX = Math.max(0, Math.floor(minX - margin));
+        const cropY = Math.max(0, Math.floor(minY - margin));
+        const cropW = Math.min(vw - cropX, Math.ceil(bw + 2 * margin));
+        const cropH = Math.min(vh - cropY, Math.ceil(bh + 2 * margin));
+
+        const maxDim = Math.max(cropW, cropH);
+        const scale = maxDim > 1650 ? (1650.0 / maxDim) : 1.0;
+        const targetW = Math.round(cropW * scale);
+        const targetH = Math.round(cropH * scale);
+
+        finalCanvas.width = targetW;
+        finalCanvas.height = targetH;
+        const fCtx = finalCanvas.getContext("2d");
+        fCtx.drawImage(bestCanvas, cropX, cropY, cropW, cropH, 0, 0, targetW, targetH);
+
+        // Quy đổi lại tọa độ cornersToSend tương ứng với ảnh đã crop (0.0 -> 1.0)
+        cornersToSend = lastValidCornersNorm.map(p => [
+          Math.max(0, Math.min(1, (p[0] * vw - cropX) / cropW)),
+          Math.max(0, Math.min(1, (p[1] * vh - cropY) / cropH))
+        ]);
+      } else {
+        const maxDim = Math.max(vw, vh);
+        const scale = maxDim > 1650 ? (1650.0 / maxDim) : 1.0;
+        finalCanvas.width = Math.round(vw * scale);
+        finalCanvas.height = Math.round(vh * scale);
+        const fCtx = finalCanvas.getContext("2d");
+        fCtx.drawImage(bestCanvas, 0, 0, finalCanvas.width, finalCanvas.height);
+        cornersToSend = null;
+      }
+
+      finalCanvas.toBlob(async (blob) => {
         if (!blob) {
           isGrading = false;
           resetGuidanceHUD();
           return;
         }
-        await postGradeImageBlob(blob, `Mobile_${Date.now()}.jpg`);
-      }, "image/jpeg", 0.92);
+        await postGradeImageBlob(blob, `Mobile_${Date.now()}.jpg`, cornersToSend);
+      }, "image/jpeg", 0.86);
     }
 
     // =========================================================================
@@ -1293,10 +1404,14 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
       event.target.value = ""; // Reset file input
     }
 
-    async function postGradeImageBlob(blobOrFile, filename) {
+    async function postGradeImageBlob(blobOrFile, filename, customCorners = null) {
       const fd = new FormData();
       fd.append("file", blobOrFile, filename);
-      if (lastValidCornersNorm) {
+      const corners = customCorners || lastValidCornersNorm;
+      if (corners) {
+        fd.append("corners", JSON.stringify(corners));
+      }
+      lastValidCornersNorm = null;
         fd.append("corners", JSON.stringify(lastValidCornersNorm));
         lastValidCornersNorm = null;
       }
