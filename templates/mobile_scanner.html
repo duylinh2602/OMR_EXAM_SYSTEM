@@ -520,11 +520,23 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
     }
 
     // =========================================================================
-    // PWA & SERVICE WORKER REGISTRATION
+    // PWA & SERVICE WORKER REGISTRATION (v9)
     // =========================================================================
+    window.addEventListener('error', (event) => {
+      console.error("Global JS Error:", event.error || event.message);
+      const dot = document.getElementById("serverStatusDot");
+      const statusText = document.getElementById("serverStatusText");
+      if (dot && statusText && statusText.innerText.includes("Đang kết nối")) {
+        dot.className = "w-1.5 h-1.5 rounded-full bg-rose-500 inline-block";
+        statusText.innerHTML = `Lỗi script: ${(event.message || "Lỗi").slice(0, 30)}... <button onclick="window.location.reload(true)" class="underline font-bold text-amber-300 ml-1">Tải lại</button>`;
+      }
+    });
+
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW Fail:', err));
+        navigator.serviceWorker.register('/sw.js?v=9').then((reg) => {
+          reg.update();
+        }).catch(err => console.log('SW Fail:', err));
       });
     }
 

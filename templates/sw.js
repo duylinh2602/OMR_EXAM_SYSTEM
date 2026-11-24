@@ -1,5 +1,5 @@
-// Service Worker cho OMR Mobile PWA (v8 - Network-First for Navigation)
-const CACHE_NAME = 'omr-pwa-v8';
+// Service Worker cho OMR Mobile PWA (v9 - Network-First for Navigation)
+const CACHE_NAME = 'omr-pwa-v9';
 const ASSETS_TO_CACHE = [
   '/scanner',
   '/manifest.json',

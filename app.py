@@ -353,14 +353,21 @@ def get_template_content(template_name: str) -> str:
     return f"<h2>Không tìm thấy tệp giao diện: {template_name}</h2>"
 
 
+NO_CACHE_HEADERS = {
+    "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0"
+}
+
+
 @app.get("/", response_class=HTMLResponse)
 async def serve_home():
-    return HTMLResponse(content=get_template_content("index.html"))
+    return HTMLResponse(content=get_template_content("index.html"), headers=NO_CACHE_HEADERS)
 
 
 @app.get("/scanner", response_class=HTMLResponse)
 async def serve_mobile_scanner():
-    return HTMLResponse(content=get_template_content("mobile_scanner.html"))
+    return HTMLResponse(content=get_template_content("mobile_scanner.html"), headers=NO_CACHE_HEADERS)
 
 
 @app.get("/manifest.json")
@@ -372,7 +379,7 @@ async def get_manifest():
 @app.get("/sw.js")
 async def get_service_worker():
     content = get_template_content("sw.js")
-    return Response(content=content, media_type="application/javascript")
+    return Response(content=content, media_type="application/javascript", headers=NO_CACHE_HEADERS)
 
 
 @app.get("/icons/{icon_name}")
@@ -386,7 +393,7 @@ async def get_pwa_icon(icon_name: str):
 @app.get("/api/health")
 async def health_check():
     """Endpoint siêu nhẹ kiểm tra trạng thái thức/ngủ của server (Zero-Downtime Health Check)."""
-    return {"status": "ok", "timestamp": time.time()}
+    return JSONResponse(content={"status": "ok", "timestamp": time.time()}, headers=NO_CACHE_HEADERS)
 
 
 @app.get("/api/session")
@@ -402,13 +409,13 @@ async def get_session():
         }
         for eid, edata in DB_DATA["exams"].items()
     ]
-    return {
+    return JSONResponse(content={
         "active_exam_id": DB_DATA["active_exam_id"],
         "exam_info": exam.get("exam_info"),
         "exam_data": exam.get("exam_data"),
         "submissions": list(exam.get("submissions", {}).values()),
         "all_exams": all_exams_summary
-    }
+    }, headers=NO_CACHE_HEADERS)
 
 
 @app.post("/api/create-exam")
