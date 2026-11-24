@@ -292,13 +292,21 @@
       <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2.5">
         <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Xuất Dữ Liệu Chấm Thi</h3>
         
-        <button onclick="exportExcelMobile()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow">
+        <button id="btnMobExportExcel" onclick="exportExcelMobile(event)" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow transition">
           <span>📊 Tải Bảng Điểm Excel (.xlsx)</span>
         </button>
 
-        <button onclick="exportPdfMobile()" class="w-full py-2.5 bg-rose-700 hover:bg-rose-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow">
+        <button id="btnMobExportPdf" onclick="exportPdfMobile(event)" class="w-full py-2.5 bg-rose-700 hover:bg-rose-600 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow transition">
           <span>📑 Tải Toàn Bộ Bài Chấm PDF</span>
         </button>
+
+        <div class="flex justify-between items-center text-[10px] text-slate-400 pt-1 border-t border-slate-800/60 px-1">
+          <span>Link tải trực tiếp máy:</span>
+          <div class="flex gap-3">
+            <a href="/api/export-excel" download class="text-emerald-400 font-bold hover:underline">Tải Excel ↗</a>
+            <a href="/api/export-pdf" download class="text-rose-400 font-bold hover:underline">Tải PDF ↗</a>
+          </div>
+        </div>
       </div>
 
       <!-- Card: Chuyển đổi / Tạo đợt thi mới -->
@@ -1788,109 +1796,141 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
 
     // =========================================================================
     // XUẤT FILE EXCEL & PDF TẢI VỀ HOẶC CHIA SẺ TRỰC TIẾP TỪ ĐIỆN THOẠI
+    // Tương thích 100% Mobile Safari, Chrome Android, Zalo Webview, PWA
     // =========================================================================
-    async function exportExcelMobile() {
-      const subs = sessionData.submissions || [];
+    async function exportExcelMobile(evt) {
+      let subs = sessionData.submissions || [];
       if (subs.length === 0) {
-        showNotificationToast("Chưa có bài thi nào được chấm để xuất bảng điểm.", true);
-        return;
+        await fetchSessionWithRetry();
+        subs = sessionData.submissions || [];
+        if (subs.length === 0) {
+          showNotificationToast("Chưa có bài thi nào được chấm trong đợt này.", true);
+          return;
+        }
+      }
+
+      const btn = evt ? evt.currentTarget : document.getElementById("btnMobExportExcel");
+      const origHtml = btn ? btn.innerHTML : "";
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span>⏳ Đang tạo bảng điểm Excel...</span>`;
       }
 
       try {
         const res = await fetch("/api/export-excel");
-        if (!res.ok) throw new Error("Máy chủ báo lỗi khi tạo file Excel.");
-        
+        if (!res.ok) {
+          // Fallback điều hướng trực tiếp
+          window.location.href = "/api/export-excel";
+          return;
+        }
+
         const blob = await res.blob();
+        const info = sessionData.exam_info || {};
+        const subName = (info.subject || "MON").replace(/[^a-zA-Z0-9]/g, "_");
+        const filename = `BANG_DIEM_${subName}_${Date.now()}.xlsx`;
+        const file = new File([blob], filename, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+
+        // 1. Thử Web Share API trước (cho phép gửi trực tiếp qua Zalo, Mail, Drive, Files)
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: "Bảng Điểm OMR",
+              text: `Bảng điểm ${info.subject || 'OMR'} (${subs.length} bài)`
+            });
+            showNotificationToast("✓ Đã chia sẻ bảng điểm thành công!", false);
+            return;
+          } catch (shareErr) {
+            if (shareErr.name === "AbortError") return; // Người dùng bấm hủy
+          }
+        }
+
+        // 2. Tải qua Blob URL (an toàn trên Mobile, giữ URL 60s không revoke ngay)
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `BANG_DIEM_${Date.now()}.xlsx`;
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
+        setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+        showNotificationToast("✓ Đang tải bảng điểm Excel về máy...", false);
       } catch (err) {
-        showNotificationToast("Lỗi xuất Excel: " + err.message, true);
-      }
-    }
-
-    function openSmartPasteMobile() {
-      document.getElementById("mobSmartPasteText").value = "";
-      const fb = document.getElementById("mobSmartPasteFeedback");
-      fb.className = "hidden";
-      fb.innerText = "";
-      document.getElementById("mobileSmartPasteModal").classList.remove("hidden");
-    }
-
-    function closeSmartPasteMobile() {
-      document.getElementById("mobileSmartPasteModal").classList.add("hidden");
-    }
-
-    async function submitSmartPasteMobile() {
-      const text = document.getElementById("mobSmartPasteText").value.trim();
-      const defaultMade = document.getElementById("mobDefaultMade").value.trim() || "0001";
-      const fb = document.getElementById("mobSmartPasteFeedback");
-      const btn = document.getElementById("btnMobSubmitSmartPaste");
-
-      if (!text) {
-        fb.className = "text-xs p-2 rounded bg-rose-950 text-rose-300 border border-rose-800 block";
-        fb.innerText = "Vui lòng nhập hoặc dán nội dung đáp án.";
-        return;
-      }
-
-      btn.disabled = true;
-      btn.innerText = "Đang nạp...";
-      fb.className = "text-xs p-2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 block";
-      fb.innerText = "Đang nhận diện cú pháp...";
-
-      try {
-        const res = await fetch("/api/smart-paste-answer-key", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: text, default_made: defaultMade })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Lỗi xử lý đáp án");
-
-        fb.className = "text-xs p-2 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 block";
-        fb.innerHTML = `✓ Đã nạp mã đề: <b>${data.codes_loaded.join(", ")}</b>! Đã chấm lại ${data.re_graded_count} bài.`;
-        showNotificationToast(`Đã nạp đáp án mã đề ${data.codes_loaded.join(", ")}!`, false);
-
-        setTimeout(async () => {
-          closeSmartPasteMobile();
-          await refreshSessionData();
-        }, 1200);
-      } catch (err) {
-        fb.className = "text-xs p-2 rounded bg-rose-950 text-rose-300 border border-rose-800 block";
-        fb.innerText = "Lỗi: " + err.message;
+        console.warn("exportExcelMobile fallback to direct navigation:", err);
+        window.location.href = "/api/export-excel";
       } finally {
-        btn.disabled = false;
-        btn.innerText = "Nạp Đáp Án";
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = origHtml;
+        }
       }
     }
 
-    async function exportPdfMobile() {
-      const subs = sessionData.submissions || [];
+    async function exportPdfMobile(evt) {
+      let subs = sessionData.submissions || [];
       if (subs.length === 0) {
-        showNotificationToast("Chưa có bài thi nào được chấm để xuất PDF.", true);
-        return;
+        await fetchSessionWithRetry();
+        subs = sessionData.submissions || [];
+        if (subs.length === 0) {
+          showNotificationToast("Chưa có bài thi nào được chấm trong đợt này.", true);
+          return;
+        }
+      }
+
+      const btn = evt ? evt.currentTarget : document.getElementById("btnMobExportPdf");
+      const origHtml = btn ? btn.innerHTML : "";
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span>⏳ Đang ghép PDF ${subs.length} bài...</span>`;
       }
 
       try {
         const res = await fetch("/api/export-pdf");
-        if (!res.ok) throw new Error("Máy chủ báo lỗi khi tạo file PDF.");
+        if (!res.ok) {
+          // Fallback điều hướng trực tiếp
+          window.location.href = "/api/export-pdf";
+          return;
+        }
 
         const blob = await res.blob();
+        const info = sessionData.exam_info || {};
+        const subName = (info.subject || "MON").replace(/[^a-zA-Z0-9]/g, "_");
+        const filename = `TAP_BAI_CHAM_${subName}_${Date.now()}.pdf`;
+        const file = new File([blob], filename, { type: "application/pdf" });
+
+        // 1. Thử Web Share API trước
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: "Tập Bài Chấm OMR",
+              text: `Tập bài thi đã chấm ${info.subject || 'OMR'} (${subs.length} bài)`
+            });
+            showNotificationToast("✓ Đã chia sẻ tập bài chấm thành công!", false);
+            return;
+          } catch (shareErr) {
+            if (shareErr.name === "AbortError") return;
+          }
+        }
+
+        // 2. Tải qua Blob URL
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `TAP_BAI_CHAM_${Date.now()}.pdf`;
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
+        setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+        showNotificationToast("✓ Đang tải tập PDF về máy...", false);
       } catch (err) {
-        showNotificationToast("Lỗi xuất PDF: " + err.message, true);
+        console.warn("exportPdfMobile fallback to direct navigation:", err);
+        window.location.href = "/api/export-pdf";
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = origHtml;
+        }
       }
     }
   </script>
