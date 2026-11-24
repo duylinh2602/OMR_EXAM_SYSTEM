@@ -550,7 +550,7 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
     // =========================================================================
     // KHỞI ĐỘNG ỨNG DỤNG (BẬT CAMERA NGAY LẬP TỨC TRONG 200MS, KHÔNG CHỜ SERVER)
     // =========================================================================
-    window.addEventListener("DOMContentLoaded", () => {
+    function initApp() {
       // 1. Mở Camera tức thì, không bị chặn bởi mạng
       startCamera();
 
@@ -558,7 +558,7 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
       fetchSessionWithRetry();
 
       // 3. Khởi động vòng lặp kiểm tra mốc quang học 90ms/chu kỳ
-      opticalInterval = setInterval(runOpticalMarkerDetection, 90);
+      if (!opticalInterval) opticalInterval = setInterval(runOpticalMarkerDetection, 90);
 
       // Chạm màn hình để bật video nếu bị chặn autoplay
       document.body.addEventListener("click", () => {
@@ -567,7 +567,13 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
           video.play().catch(e => {});
         }
       }, { once: true });
-    });
+    }
+
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", initApp);
+    } else {
+      initApp();
+    }
 
     // =========================================================================
     // ĐIỀU HƯỚNG TABS
@@ -617,7 +623,7 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
       const timeoutId = setTimeout(() => controller.abort(), 8000);
 
       try {
-        const res = await fetch("/api/session", { signal: controller.signal });
+        const res = await fetch("/api/session", { signal: controller.signal, cache: "no-store" });
         clearTimeout(timeoutId);
         if (!res.ok) throw new Error("HTTP " + res.status);
         
@@ -703,7 +709,7 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
       // Cấu hình camera tối ưu, tương thích 100% Android Chrome & Xiaomi
       const constraintCandidates = [
         { video: { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
-        { video: { facingMode: facingMode }, audio: false },
+        { video: { facingMode: { ideal: facingMode } }, audio: false },
         { video: true, audio: false }
       ];
 
@@ -1488,9 +1494,6 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
         fd.append("corners", JSON.stringify(corners));
       }
       lastValidCornersNorm = null;
-        fd.append("corners", JSON.stringify(lastValidCornersNorm));
-        lastValidCornersNorm = null;
-      }
 
       try {
         const res = await fetch("/api/grade-single-file", { method: "POST", body: fd });
