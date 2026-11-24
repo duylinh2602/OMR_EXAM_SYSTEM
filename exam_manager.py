@@ -377,7 +377,6 @@ class ExamManager:
         }
 
     @classmethod
-    @classmethod
     def _parse_single_key_block(cls, text: str) -> Dict[str, Any]:
         import re
         p1, p2, p3 = {}, {}, {}

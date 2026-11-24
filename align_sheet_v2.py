@@ -327,6 +327,52 @@ def detect_a4_paper_contour(gray: np.ndarray) -> Optional[np.ndarray]:
     return None
 
 
+def verify_aligned_omr_template(canvas_bgr: np.ndarray) -> bool:
+    """
+    Xác thực nghiêm ngặt ảnh sau khi nắn phẳng có đúng là phiếu trả lời trắc nghiệm Bộ GD&ĐT hay không.
+    Kiểm tra:
+    1. Độ sáng trung bình toàn trang >= 135 (bảo đảm là giấy trắng).
+    2. Kiểm tra 10 vị trí mốc chuẩn (5 mốc trái TPL_LEFT_5 và 5 mốc phải TPL_RIGHT_5):
+       Tại mỗi mốc, vùng lõi đen (r=9) phải tối hơn rõ rệt so với vành giấy trắng xung quanh (r=16..26)
+       với độ tương phản chênh lệch ít nhất 35 đơn vị, và độ sáng vành giấy >= 135.
+    3. Phải có ít nhất 7/10 mốc đạt chuẩn mới công nhận là phiếu OMR hợp lệ.
+    """
+    if canvas_bgr is None or canvas_bgr.shape[:2] != (CANONICAL_HEIGHT, CANONICAL_WIDTH):
+        return False
+
+    gray = cv2.cvtColor(canvas_bgr, cv2.COLOR_BGR2GRAY)
+    mean_lum = float(np.mean(gray))
+    if mean_lum < 135.0:
+        return False
+
+    r_core = 9
+    r_in = 16
+    r_out = 26
+
+    yy, xx = np.ogrid[-r_out : r_out + 1, -r_out : r_out + 1]
+    dist_sq = xx * xx + yy * yy
+    mask_core = dist_sq <= (r_core * r_core)
+    mask_ring = (dist_sq >= (r_in * r_in)) & (dist_sq <= (r_out * r_out))
+
+    valid_markers = 0
+    all_markers = np.vstack([TPL_LEFT_5, TPL_RIGHT_5])
+
+    for pt in all_markers:
+        cx, cy = int(round(pt[0])), int(round(pt[1]))
+        if cx - r_out < 0 or cy - r_out < 0 or cx + r_out >= CANONICAL_WIDTH or cy + r_out >= CANONICAL_HEIGHT:
+            continue
+
+        patch = gray[cy - r_out : cy + r_out + 1, cx - r_out : cx + r_out + 1]
+        core_mean = float(np.mean(patch[mask_core]))
+        ring_mean = float(np.mean(patch[mask_ring]))
+
+        # Mốc đạt chuẩn: lõi tối < 135, vành giấy sáng >= 135, chênh lệch tương phản >= 35
+        if core_mean < 135.0 and ring_mean >= 135.0 and (ring_mean - core_mean) >= 35.0:
+            valid_markers += 1
+
+    return valid_markers >= 7
+
+
 def align_sheet_4band(image_path: Path, output_path: Path) -> np.ndarray:
     """Nắn phẳng phối cảnh đa tầng sau khi đã tự động chuẩn hóa chiều đứng."""
     raw_bgr = cv2.imread(str(image_path))
@@ -374,19 +420,21 @@ def align_sheet_4band(image_path: Path, output_path: Path) -> np.ndarray:
             y0, y1 = band_bounds[b_idx]
             canvas[y0:y1, :] = warped_band[y0:y1, :]
 
-        output_path.parent.mkdir(exist_ok=True, parents=True)
-        cv2.imwrite(str(output_path), canvas)
-        return canvas
+        if verify_aligned_omr_template(canvas):
+            output_path.parent.mkdir(exist_ok=True, parents=True)
+            cv2.imwrite(str(output_path), canvas)
+            return canvas
 
     # TẦNG 2: NẮN 4 MỐC GÓC OMR THÍCH ỨNG (DÀNH CHO CAMERA DI ĐỘNG CẦM TAY)
     if corners_4 is not None:
         H_corners = cv2.getPerspectiveTransform(corners_4, tpl_corners)
         canvas = cv2.warpPerspective(image_bgr, H_corners, (out_w, out_h), flags=cv2.INTER_CUBIC)
-        output_path.parent.mkdir(exist_ok=True, parents=True)
-        cv2.imwrite(str(output_path), canvas)
-        return canvas
+        if verify_aligned_omr_template(canvas):
+            output_path.parent.mkdir(exist_ok=True, parents=True)
+            cv2.imwrite(str(output_path), canvas)
+            return canvas
 
-    # TẦNG 3: DỰ PHÒNG VIỀN GIẤY A4 TRÊN NỀN BÀN
+    # TẦNG 3: DỰ PHÒNG VIỀN GIẤY A4 TRÊN NỀN BÀN (CHỈ CHẤP NHẬN NẾU ĐẠT XÁC THỰC MỐC PHIẾU OMR)
     paper_corners = detect_a4_paper_contour(gray)
     if paper_corners is not None:
         dst_a4 = np.array([
@@ -395,11 +443,12 @@ def align_sheet_4band(image_path: Path, output_path: Path) -> np.ndarray:
         ], dtype=np.float32)
         H_paper = cv2.getPerspectiveTransform(paper_corners, dst_a4)
         canvas_a4 = cv2.warpPerspective(image_bgr, H_paper, (out_w, out_h), flags=cv2.INTER_CUBIC)
-        output_path.parent.mkdir(exist_ok=True, parents=True)
-        cv2.imwrite(str(output_path), canvas_a4)
-        return canvas_a4
+        if verify_aligned_omr_template(canvas_a4):
+            output_path.parent.mkdir(exist_ok=True, parents=True)
+            cv2.imwrite(str(output_path), canvas_a4)
+            return canvas_a4
 
     raise RuntimeError(
-        "ALIGNMENT_FAILED: Không nhận diện được đủ 4 mốc định vị của bài thi. "
-        "Hãy giữ điện thoại hướng thẳng vào bài thi và chụp đủ 4 góc phiếu."
+        "NOT_OMR_SHEET: Không nhận diện được đúng mẫu phiếu trả lời trắc nghiệm Bộ GD&ĐT. "
+        "Hãy đảm bảo đưa đúng phiếu thi vào khung ngắm và đủ ánh sáng."
     )

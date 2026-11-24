@@ -17,6 +17,8 @@ import json
 import re
 import time
 import uuid
+import shutil
+import threading
 import unicodedata
 import traceback
 from datetime import datetime
@@ -61,6 +63,8 @@ app.add_middleware(
 UPLOAD_DIR = Path("output/web_uploads")
 GRADED_DIR = Path("output/graded_sheets")
 DB_FILE = Path("output/exams_db.json")
+DB_FILE_BAK = Path("output/exams_db.json.bak")
+DB_LOCK = threading.RLock()
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 GRADED_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -76,6 +80,22 @@ def sanitize_ascii_filename(text: str, fallback: str = "FILE") -> str:
     return clean if clean else fallback
 
 
+def find_aligned_image_path(sub_id: str) -> Optional[Path]:
+    """Thống nhất tìm ảnh nắn phẳng tốt nhất của bài thi trong UPLOAD_DIR và GRADED_DIR."""
+    candidates = [
+        UPLOAD_DIR / f"{sub_id}_aligned.jpg",
+        UPLOAD_DIR / f"{sub_id}_aligned.png",
+        GRADED_DIR / f"{sub_id}_aligned.jpg",
+        GRADED_DIR / f"{sub_id}_aligned.png",
+        GRADED_DIR / f"{sub_id}_graded.jpg",
+        GRADED_DIR / f"{sub_id}_graded.png",
+    ]
+    for c_path in candidates:
+        if c_path.exists():
+            return c_path
+    return None
+
+
 # ==============================================================================
 # 1. MODELS (PYDANTIC)
 # ==============================================================================
@@ -89,11 +109,11 @@ class CreateExamRequest(BaseModel):
 
 class UpdateSubmissionRequest(BaseModel):
     submission_id: str
-    sbd: str
-    exam_code: str
-    part1: Dict[str, str]
-    part2: Dict[str, Dict[str, str]]
-    part3: Dict[str, Optional[float]]
+    sbd: Optional[str] = None
+    exam_code: Optional[str] = None
+    part1: Optional[Dict[str, str]] = None
+    part2: Optional[Dict[str, Dict[str, str]]] = None
+    part3: Optional[Dict[str, Optional[float]]] = None
 
 
 class SmartPasteRequest(BaseModel):
@@ -124,28 +144,45 @@ DB_DATA: Dict[str, Any] = {
     }
 }
 
-if DB_FILE.exists():
+def _load_db_from_file(p: Path) -> Optional[Dict[str, Any]]:
+    if not p.exists() or p.stat().st_size == 0:
+        return None
     try:
-        with open(DB_FILE, "r", encoding="utf-8") as f:
-            disk_db = json.load(f)
-            if "exams" in disk_db:
-                DB_DATA = disk_db
-            elif "exam_info" in disk_db:
-                old_id = "exam_legacy"
-                DB_DATA = {
-                    "active_exam_id": old_id,
-                    "exams": {
-                        old_id: {
-                            "id": old_id,
-                            "exam_info": disk_db.get("exam_info", {}),
-                            "exam_data": disk_db.get("exam_data"),
-                            "submissions": disk_db.get("submissions", {}),
-                            "created_at": "04/11/2026"
-                        }
-                    }
-                }
+        with open(p, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict) and ("exams" in data or "exam_info" in data):
+                return data
     except Exception as e:
-        print("[!] Lỗi nạp database:", e)
+        print(f"[!] Lỗi đọc {p}: {e}")
+    return None
+
+disk_db = _load_db_from_file(DB_FILE)
+if disk_db is None and DB_FILE_BAK.exists():
+    print("[*] exams_db.json lỗi hoặc rỗng, đang tự động phục hồi từ exams_db.json.bak...")
+    disk_db = _load_db_from_file(DB_FILE_BAK)
+    if disk_db:
+        try:
+            shutil.copy2(DB_FILE_BAK, DB_FILE)
+        except Exception:
+            pass
+
+if disk_db:
+    if "exams" in disk_db:
+        DB_DATA = disk_db
+    elif "exam_info" in disk_db:
+        old_id = "exam_legacy"
+        DB_DATA = {
+            "active_exam_id": old_id,
+            "exams": {
+                old_id: {
+                    "id": old_id,
+                    "exam_info": disk_db.get("exam_info", {}),
+                    "exam_data": disk_db.get("exam_data"),
+                    "submissions": disk_db.get("submissions", {}),
+                    "created_at": "04/11/2026"
+                }
+            }
+        }
 
 
 def get_current_exam() -> Dict[str, Any]:
@@ -175,8 +212,106 @@ def get_current_exam() -> Dict[str, Any]:
 
 
 def save_to_disk():
-    with open(DB_FILE, "w", encoding="utf-8") as f:
-        json.dump(DB_DATA, f, ensure_ascii=False, indent=2)
+    """Ghi nguyên tử (Atomic write) với lock và backup an toàn chống xung đột đa luồng/mất dữ liệu."""
+    with DB_LOCK:
+        try:
+            # 1. Sao lưu dự phòng
+            if DB_FILE.exists() and DB_FILE.stat().st_size > 0:
+                try:
+                    shutil.copy2(DB_FILE, DB_FILE_BAK)
+                except Exception:
+                    pass
+
+            # 2. Ghi ra tệp tạm và fsync
+            tmp_file = DB_FILE.parent / f".exams_db.json.{uuid.uuid4().hex}.tmp"
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                json.dump(DB_DATA, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+
+            # 3. Thay thế tệp gốc với retry trên Windows
+            success = False
+            for attempt in range(5):
+                try:
+                    os.replace(tmp_file, DB_FILE)
+                    success = True
+                    break
+                except PermissionError:
+                    time.sleep(0.05)
+
+            if not success and tmp_file.exists():
+                try:
+                    shutil.copy2(tmp_file, DB_FILE)
+                    tmp_file.unlink(missing_ok=True)
+                except Exception as e:
+                    print("[!] Lỗi sao chép file database cuối cùng:", e)
+        except Exception as e:
+            print("[!] Lỗi lưu database:", e)
+
+
+def _rebuild_anomalies_after_manual_edit(sub: Dict[str, Any], exam_data: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Tự động xóa các cảnh báo cũ khi giáo viên đã sửa tay thông tin bài thi hợp lệ."""
+    old_anoms = sub.get("anomalies", [])
+    new_anoms = []
+
+    sbd = str(sub.get("sbd", "")).strip()
+    exam_code = str(sub.get("exam_code", "")).strip().zfill(4) if sub.get("exam_code") else ""
+    p1 = sub.get("details", {}).get("part1", {})
+    p2 = sub.get("details", {}).get("part2", {})
+    p3 = sub.get("details", {}).get("part3", {})
+    answer_keys = exam_data.get("answer_keys", {}) if exam_data else {}
+
+    sbd_valid = bool(sbd and "?" not in sbd and "[" not in sbd)
+    code_valid = bool(exam_code and "?" not in exam_code and "[" not in exam_code and len(exam_code) == 4)
+
+    for a in old_anoms:
+        atype = a.get("type", "")
+        amsg = a.get("msg", "")
+
+        # 1. Bỏ lỗi SBD nếu SBD đã hợp lệ
+        if atype in {"MISSING_SBD", "SBD_DOUBLE_FILL"} and sbd_valid:
+            continue
+
+        # 2. Bỏ lỗi Mã đề nếu Mã đề đã hợp lệ
+        if atype in {"INVALID_EXAM_CODE", "UNKNOWN_CODE", "NO_ANSWER_KEY", "MADE_DOUBLE_FILL"} and code_valid:
+            continue
+
+        # 3. Bỏ lỗi Phần I nếu câu đó đã chọn 1 đáp án A/B/C/D duy nhất
+        if atype == "P1_DOUBLE_FILL":
+            m = re.search(r"Câu\s+(\d+)", amsg)
+            if m:
+                q_num = int(m.group(1))
+                if p1.get(q_num) in {"A", "B", "C", "D"}:
+                    continue
+
+        # 4. Bỏ lỗi Phần II nếu ý đó đã chọn Đ hoặc S duy nhất
+        if atype in {"P2_DOUBLE_FILL", "P2_UNCERTAIN"}:
+            m = re.search(r"Câu\s+(\d+)([a-d])", amsg)
+            if m:
+                q_num = int(m.group(1))
+                rk = m.group(2).lower()
+                if p2.get(q_num, {}).get(rk) in {"Đ", "S"}:
+                    continue
+
+        # 5. Bỏ lỗi Phần III nếu câu đó đã được sửa giá trị hợp lệ
+        if atype.startswith("P3_Q") and "_VIOLATION" in atype:
+            m = re.search(r"P3_Q(\d+)_VIOLATION", atype)
+            if m:
+                q_num = int(m.group(1))
+                p3_val = p3.get(q_num)
+                if isinstance(p3_val, dict) and p3_val.get("is_valid") and p3_val.get("normalized_value") is not None:
+                    continue
+                elif isinstance(p3_val, (int, float)):
+                    continue
+
+        new_anoms.append(a)
+
+    # Nếu mã đề không có trong barem đáp án -> thêm UNKNOWN_CODE
+    if code_valid and answer_keys and exam_code not in answer_keys:
+        if not any(a.get("type") == "UNKNOWN_CODE" for a in new_anoms):
+            new_anoms.append({"type": "UNKNOWN_CODE", "msg": f"Mã đề {exam_code} không tồn tại trong barem đáp án"})
+
+    return new_anoms
 
 
 def delete_submission_files(submission_id: str):
@@ -316,6 +451,12 @@ async def switch_exam(exam_id: str):
     }
 
 
+@app.post("/api/select-exam/{exam_id}")
+async def select_exam(exam_id: str):
+    """Bí danh cho switch_exam phục vụ PWA Mobile Scanner."""
+    return await switch_exam(exam_id)
+
+
 @app.delete("/api/delete-exam/{exam_id}")
 async def delete_exam(exam_id: str):
     global pipeline
@@ -386,28 +527,7 @@ def _process_and_save(img_bgr: np.ndarray, file_name: str, sub_id: str, exam: Di
         reasons = q_report.get("reasons", ["Ảnh không đạt chuẩn chất lượng nhận diện."])
         reason_str = "; ".join(reasons)
         user_friendly_msg = f"Ảnh không đạt chuẩn kiểm định ({reason_str}). Vui lòng chụp lại rõ nét và đủ sáng."
-
-        # Luôn lưu ảnh gốc vào GRADED_DIR để người dùng bấm xem lại được ngay ảnh vừa chụp
-        graded_path = GRADED_DIR / f"{sub_id}_graded.jpg"
-        cv2.imwrite(str(graded_path), img_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
-        preview_webp = GRADED_DIR / f"{sub_id}_preview.webp"
-        cv2.imwrite(str(preview_webp), img_bgr, [cv2.IMWRITE_WEBP_QUALITY, 75])
-
-        err_sub = {
-            "submission_id": sub_id,
-            "file_name": file_name,
-            "sbd": "CHƯA RÕ",
-            "exam_code": "CHƯA RÕ",
-            "has_error": True,
-            "status": "QUALITY_CHECK_FAILED",
-            "error_msg": user_friendly_msg,
-            "anomalies": [{"type": "QUALITY_ERROR", "msg": r} for r in reasons],
-            "scores": {"status": "ERROR", "p1": 0.0, "p2": 0.0, "p3": 0.0, "total": 0.0},
-            "details": {"part1": {}, "part2": {}, "part3": {}},
-            "quality_metrics": q_report.get("metrics", {})
-        }
-        exam["submissions"][sub_id] = err_sub
-        return err_sub
+        raise HTTPException(status_code=422, detail=user_friendly_msg)
 
     temp_raw = UPLOAD_DIR / f"{sub_id}_raw.jpg"
     temp_aligned = UPLOAD_DIR / f"{sub_id}_aligned.jpg"
@@ -449,42 +569,31 @@ def _process_and_save(img_bgr: np.ndarray, file_name: str, sub_id: str, exam: Di
         exam["submissions"][sub_id] = res
         return res
 
+    except HTTPException:
+        raise
     except Exception as err:
         traceback.print_exc()
-        # Luôn lưu ảnh gốc vào GRADED_DIR để người dùng bấm xem lại được ngay ảnh vừa chụp
-        graded_path = GRADED_DIR / f"{sub_id}_graded.jpg"
-        if not graded_path.exists() and img_bgr is not None:
-            cv2.imwrite(str(graded_path), img_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
-            preview_webp = GRADED_DIR / f"{sub_id}_preview.webp"
-            cv2.imwrite(str(preview_webp), img_bgr, [cv2.IMWRITE_WEBP_QUALITY, 75])
-
         if temp_raw.exists():
             try:
                 temp_raw.unlink()
             except Exception:
                 pass
+        if temp_aligned.exists():
+            try:
+                temp_aligned.unlink()
+            except Exception:
+                pass
 
         err_msg = str(err)
-        if "ALIGNMENT_FAILED" in err_msg:
+        if "NOT_OMR_SHEET" in err_msg:
+            user_friendly_msg = "Không nhận diện được đúng mẫu phiếu trả lời trắc nghiệm Bộ GD&ĐT. Hãy đảm bảo đưa đúng phiếu thi vào khung ngắm."
+        elif "ALIGNMENT_FAILED" in err_msg:
             user_friendly_msg = "Ảnh bị mất mốc định vị hoặc quá nghiêng. Hãy chụp thẳng góc và đủ sáng."
         else:
             user_friendly_msg = f"Lỗi xử lý bài làm: {err_msg}"
 
-        err_sub = {
-            "submission_id": sub_id,
-            "file_name": file_name,
-            "sbd": "CHƯA RÕ",
-            "exam_code": "CHƯA RÕ",
-            "has_error": True,
-            "status": "PROCESSING_ERROR",
-            "error_msg": user_friendly_msg,
-            "anomalies": [{"type": "ALIGN_ERROR", "msg": user_friendly_msg}],
-            "scores": {"status": "ERROR", "p1": 0.0, "p2": 0.0, "p3": 0.0, "total": 0.0},
-            "details": {"part1": {}, "part2": {}, "part3": {}},
-            "quality_metrics": q_report.get("metrics", {})
-        }
-        exam["submissions"][sub_id] = err_sub
-        return err_sub
+        # Ném lỗi 422 Unprocessable Entity - Tuyệt đối không lưu bản ghi rác vào cơ sở dữ liệu
+        raise HTTPException(status_code=422, detail=user_friendly_msg)
 
 
 @app.post("/api/grade-single-file")
@@ -510,12 +619,23 @@ async def grade_single_file(file: UploadFile = File(...)):
                 img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGBA2BGR if pix.n == 4 else cv2.COLOR_RGB2BGR)
                 sub_id = str(uuid.uuid4())[:8]
                 page_name = f"{file.filename}_Trang_{page_idx + 1}"
-                res = _process_and_save(img_bgr, page_name, sub_id, exam)
-                new_subs.append(res)
+                try:
+                    res = _process_and_save(img_bgr, page_name, sub_id, exam)
+                    new_subs.append(res)
+                except HTTPException as e:
+                    print(f"[!] Trang {page_idx + 1} bị bỏ qua do lỗi: {e.detail}")
             doc.close()
+        except HTTPException:
+            raise
         except Exception as err:
             traceback.print_exc()
             raise HTTPException(status_code=400, detail=f"Lỗi đọc file PDF: {err}")
+
+        if not new_subs:
+            raise HTTPException(
+                status_code=422,
+                detail="Tất cả các trang trong file PDF đều không đạt chuẩn kiểm định hoặc không phải phiếu OMR."
+            )
     else:
         np_arr = np.frombuffer(raw_bytes, np.uint8)
         img_bgr = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
@@ -523,7 +643,6 @@ async def grade_single_file(file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="Không thể giải mã file ảnh.")
         sub_id = str(uuid.uuid4())[:8]
         res = _process_and_save(img_bgr, file.filename, sub_id, exam)
-        # Giữ lại bài thi trong danh sách để người dùng có thể bấm vào xem chi tiết ảnh chụp và nguyên nhân lỗi
         new_subs.append(res)
 
     save_to_disk()
@@ -539,30 +658,30 @@ async def grade_single_file(file: UploadFile = File(...)):
 # ==============================================================================
 
 @app.post("/api/update-submission")
-async def update_submission(payload: dict):
+async def update_submission(payload: UpdateSubmissionRequest):
     """Cập nhật SBD, Mã đề, Đáp án; tự động chấm lại và vẽ lại tem bút đỏ Cột 3."""
     try:
         exam = get_current_exam()
-        sub_id = payload.get("submission_id")
+        sub_id = payload.submission_id
         if not sub_id or sub_id not in exam.get("submissions", {}):
             raise HTTPException(status_code=404, detail="Không tìm thấy bài thi cần cập nhật.")
 
         sub = exam["submissions"][sub_id]
 
-        new_sbd = str(payload.get("sbd", sub.get("sbd", ""))).strip()
-        new_exam_code = str(payload.get("exam_code", sub.get("exam_code", ""))).strip().zfill(4)
+        new_sbd = str(payload.sbd).strip() if payload.sbd is not None else sub.get("sbd", "")
+        new_exam_code = str(payload.exam_code).strip().zfill(4) if payload.exam_code else sub.get("exam_code", "")
 
         sub["sbd"] = new_sbd
         sub["exam_code"] = new_exam_code
 
-        if "part1" in payload and isinstance(payload["part1"], dict):
-            sub["details"]["part1"] = {int(k): str(v).upper() for k, v in payload["part1"].items() if v}
-        if "part2" in payload and isinstance(payload["part2"], dict):
-            sub["details"]["part2"] = {int(k): {str(sk).lower(): str(sv).upper() for sk, sv in sdict.items()} for k, sdict in payload["part2"].items() if sdict}
+        if payload.part1 is not None and isinstance(payload.part1, dict):
+            sub["details"]["part1"] = {int(k): str(v).upper() for k, v in payload.part1.items() if v}
+        if payload.part2 is not None and isinstance(payload.part2, dict):
+            sub["details"]["part2"] = {int(k): {str(sk).lower(): str(sv).upper() for sk, sv in sdict.items()} for k, sdict in payload.part2.items() if sdict}
         
-        if "part3" in payload and isinstance(payload["part3"], dict):
+        if payload.part3 is not None and isinstance(payload.part3, dict):
             p3_clean = {}
-            for k, v in payload["part3"].items():
+            for k, v in payload.part3.items():
                 if v is not None and str(v).strip() != "":
                     try:
                         f_val = float(str(v).replace(",", "."))
@@ -574,8 +693,7 @@ async def update_submission(payload: dict):
                         }
                     except ValueError:
                         pass
-            if p3_clean:
-                sub["details"]["part3"] = p3_clean
+            sub["details"]["part3"] = p3_clean
 
         exam_data = exam.get("exam_data")
         if exam_data and "answer_keys" in exam_data:
@@ -588,48 +706,51 @@ async def update_submission(payload: dict):
             sub["details"].get("part3", {})
         )
         sub["scores"] = new_scores
-        sub["has_error"] = False
+
+        # Tự động cập nhật lại danh sách anomalies sau khi sửa tay
+        sub["anomalies"] = _rebuild_anomalies_after_manual_edit(sub, exam_data)
+
+        # Cập nhật lại status chính xác
+        has_critical = any(
+            a["type"] in {"INVALID_EXAM_CODE", "UNKNOWN_CODE", "NO_ANSWER_KEY", "MISSING_SBD"}
+            or a["type"].endswith("DOUBLE_FILL")
+            or "VIOLATION" in a["type"]
+            for a in sub["anomalies"]
+        )
+        if new_scores.get("status") in {"UNKNOWN_CODE", "NO_ANSWER_KEY"} or has_critical:
+            sub["status"] = "NEEDS_REVIEW"
+        else:
+            sub["status"] = "GRADED"
+
+        sub["has_error"] = (sub["status"] == "NEEDS_REVIEW")
         sub["error_msg"] = None
-        sub["status"] = "GRADED" if new_scores.get("status") == "GRADED" else "NEEDS_REVIEW"
         sub["updated_at"] = datetime.now().isoformat()
 
         try:
-            # Tìm ảnh nền đã nắn phẳng (hỗ trợ cả đuôi .jpg và .png)
-            base_img = None
-            candidates = [
-                UPLOAD_DIR / f"{sub_id}_aligned.jpg",
-                UPLOAD_DIR / f"{sub_id}_aligned.png",
-                GRADED_DIR / f"{sub_id}_aligned.jpg",
-                GRADED_DIR / f"{sub_id}_aligned.png",
-                GRADED_DIR / f"{sub_id}_graded.jpg",
-                GRADED_DIR / f"{sub_id}_graded.png",
-            ]
-            for c_path in candidates:
-                if c_path.exists():
-                    base_img = cv2.imread(str(c_path))
-                    if base_img is not None:
-                        if "graded" in c_path.name:
-                            base_img[185:440, 65:410] = (255, 255, 255)
-                        break
+            aligned_file = find_aligned_image_path(sub_id)
+            if aligned_file is not None:
+                base_img = cv2.imread(str(aligned_file))
+                if base_img is not None:
+                    if "graded" in aligned_file.name:
+                        base_img[185:440, 65:410] = (255, 255, 255)
 
-            if base_img is not None:
-                key_dict = pipeline.answer_keys.get(new_exam_code, {})
-                stamped = VisualStamper.stamp_graded_sheet(
-                    aligned_bgr=base_img,
-                    submission=sub,
-                    p1_coords=pipeline.p1_coords,
-                    p2_coords=pipeline.p2_coords,
-                    p3_coords=pipeline.p3_coords,
-                    key_dict=key_dict,
-                    sbd_columns=pipeline.sbd_columns,
-                    made_columns=pipeline.made_columns
-                )
-                graded_path = GRADED_DIR / f"{sub_id}_graded.jpg"
-                cv2.imwrite(str(graded_path), stamped, [cv2.IMWRITE_JPEG_QUALITY, 90])
-                
-                preview_webp = GRADED_DIR / f"{sub_id}_preview.webp"
-                cv2.imwrite(str(preview_webp), stamped, [cv2.IMWRITE_WEBP_QUALITY, 80])
-                print(f"[OK] Da ve lai tem but do: {sub_id} (Diem: {new_scores['total']})")
+                    key_dict = pipeline.answer_keys.get(new_exam_code, {})
+                    stamped = VisualStamper.stamp_graded_sheet(
+                        aligned_bgr=base_img,
+                        submission=sub,
+                        p1_coords=pipeline.p1_coords,
+                        p2_coords=pipeline.p2_coords,
+                        p3_coords=pipeline.p3_coords,
+                        key_dict=key_dict,
+                        sbd_columns=pipeline.sbd_columns,
+                        made_columns=pipeline.made_columns
+                    )
+                    graded_path = GRADED_DIR / f"{sub_id}_graded.jpg"
+                    cv2.imwrite(str(graded_path), stamped, [cv2.IMWRITE_JPEG_QUALITY, 90])
+                    
+                    preview_webp = GRADED_DIR / f"{sub_id}_preview.webp"
+                    cv2.imwrite(str(preview_webp), stamped, [cv2.IMWRITE_WEBP_QUALITY, 80])
+                    print(f"[OK] Da ve lai tem but do: {sub_id} (Diem: {new_scores['total']})")
         except Exception as stamp_err:
             print(f"[!] Canh bao ve tem but do: {stamp_err}")
 
@@ -663,22 +784,7 @@ async def delete_submission(submission_id: str):
 
 @app.get("/api/crop-info/{submission_id}")
 async def get_crop_info(submission_id: str):
-    # Tìm ảnh nắn phẳng để cắt thông tin viết tay
-    aligned_path = None
-    for ext in [".jpg", ".png"]:
-        p = UPLOAD_DIR / f"{submission_id}_aligned{ext}"
-        if p.exists():
-            aligned_path = p
-            break
-        p = GRADED_DIR / f"{submission_id}_aligned{ext}"
-        if p.exists():
-            aligned_path = p
-            break
-        p = GRADED_DIR / f"{submission_id}_graded{ext}"
-        if p.exists():
-            aligned_path = p
-            break
-
+    aligned_path = find_aligned_image_path(submission_id)
     if not aligned_path or not aligned_path.exists():
         raise HTTPException(status_code=404, detail="Không tìm thấy bài làm")
 
@@ -787,17 +893,7 @@ async def upload_answer_key(file: UploadFile = File(...)):
 
         # Chấm lại các bài thi hiện có theo đáp án mới
         for sub_id, sub in exam["submissions"].items():
-            aligned_p = None
-            for ext in [".jpg", ".png"]:
-                p = UPLOAD_DIR / f"{sub_id}_aligned{ext}"
-                if p.exists():
-                    aligned_p = p
-                    break
-                p = GRADED_DIR / f"{sub_id}_aligned{ext}"
-                if p.exists():
-                    aligned_p = p
-                    break
-
+            aligned_p = find_aligned_image_path(sub_id)
             if aligned_p and aligned_p.exists():
                 img = cv2.imread(str(aligned_p))
                 if img is not None:
@@ -815,10 +911,12 @@ async def upload_answer_key(file: UploadFile = File(...)):
                     exam["submissions"][sub_id] = updated
 
         save_to_disk()
+        codes_list = list(exam_data["answer_keys"].keys())
         return {
             "status": "SUCCESS",
             "exam_name": exam_data["exam_name"],
-            "codes_loaded": list(exam_data["answer_keys"].keys()),
+            "codes_loaded": codes_list,
+            "exam_codes": codes_list,
             "exam_info": exam["exam_info"]
         }
     except Exception as err:
@@ -839,12 +937,17 @@ async def smart_paste_answer_key(payload: SmartPasteRequest):
             raise HTTPException(status_code=400, detail="Không nhận diện được câu hỏi hoặc đáp án nào. Hãy kiểm tra định dạng dán (VD: 1.A 2.B hoặc 1A 2B).")
 
         exam = get_current_exam()
+        default_config = {
+            "pts_p1": 0.25,
+            "pts_p2_rule": {0: 0.0, 1: 0.1, 2: 0.25, 3: 0.5, 4: 1.0},
+            "pts_p3": 0.25
+        }
         if not exam.get("exam_data"):
             exam["exam_data"] = {
                 "exam_name": f"{exam['exam_info'].get('subject', 'Đề thi')} - {exam['exam_info'].get('period', 'Kiểm tra')}",
                 "subject": exam["exam_info"].get("subject", "Sinh học"),
                 "period": exam["exam_info"].get("period", "Giữa kỳ I"),
-                "config": parsed_result.get("config", {"part1_max": 18, "part2_max": 4, "part3_max": 6}),
+                "config": parsed_result.get("config", default_config),
                 "answer_keys": {},
                 "scoring_rules": {
                     "part1": {"points_per_question": 0.25},
@@ -856,7 +959,7 @@ async def smart_paste_answer_key(payload: SmartPasteRequest):
                 }
             }
         elif "config" not in exam["exam_data"]:
-            exam["exam_data"]["config"] = parsed_result.get("config", {"part1_max": 18, "part2_max": 4, "part3_max": 6})
+            exam["exam_data"]["config"] = parsed_result.get("config", default_config)
 
         # Cập nhật các mã đề mới parsed vào answer_keys (merge từng phần, không xóa Phần II, III)
         for code, new_k in parsed_keys.items():
@@ -875,12 +978,7 @@ async def smart_paste_answer_key(payload: SmartPasteRequest):
         for sub_id, sub in exam.get("submissions", {}).items():
             sub_code = sub.get("exam_code", "")
             if sub_code in exam["exam_data"]["answer_keys"]:
-                aligned_p = None
-                for p in [GRADED_DIR / f"{sub_id}_aligned.png", UPLOAD_DIR / f"{sub_id}_aligned.png", GRADED_DIR / f"{sub_id}_aligned.jpg"]:
-                    if p.exists():
-                        aligned_p = p
-                        break
-
+                aligned_p = find_aligned_image_path(sub_id)
                 if aligned_p and aligned_p.exists():
                     img = cv2.imread(str(aligned_p))
                     if img is not None:
@@ -902,6 +1000,7 @@ async def smart_paste_answer_key(payload: SmartPasteRequest):
         return {
             "status": "SUCCESS",
             "codes_loaded": list(parsed_keys.keys()),
+            "exam_codes": list(parsed_keys.keys()),
             "total_codes": list(exam["exam_data"]["answer_keys"].keys()),
             "re_graded_count": re_graded_count,
             "details": {
@@ -1052,4 +1151,5 @@ async def export_pdf_alias():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)

@@ -1,11 +1,10 @@
 # main_desktop.py
 # -*- coding: utf-8 -*-
 """
-DESKTOP LAUNCHER CHO HỆ THỐNG OMR 2025 (PRODUCTION DESKTOP CLIENT)
-Tích hợp Self-Healing Bootstrapper: Tự động trích xuất tọa độ phôi mẫu và template
+DESKTOP LAUNCHER CHO HỆ THỐNG OMR 2026 (PRODUCTION DESKTOP CLIENT)
+Tích hợp Self-Healing Bootstrapper: Tự động trích xuất tọa độ phôi mẫu, file Excel mẫu và template
 từ _internal sang working directory trước khi nạp FastAPI Pipeline.
 """
-# main_desktop.py
 import sys
 import os
 
@@ -19,8 +18,7 @@ if sys.platform == "win32":
             sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
-import sys
-import os
+
 from pathlib import Path
 import shutil
 import multiprocessing
@@ -57,21 +55,32 @@ if getattr(sys, 'frozen', False):
         if not int_dir.exists():
             continue
         
-        # Sao chép các file JSON tọa độ
+        # Sao chép các file tọa độ & template mẫu
         src_output = int_dir / "output"
         if src_output.exists():
-            for f in src_output.glob("*.json"):
-                dest_f = RUNTIME_OUTPUT_DIR / f.name
-                if not dest_f.exists() or dest_f.stat().st_size == 0:
-                    shutil.copy2(f, dest_f)
+            for f in src_output.iterdir():
+                if f.is_file():
+                    dest_f = RUNTIME_OUTPUT_DIR / f.name
+                    if not dest_f.exists() or dest_f.stat().st_size == 0:
+                        try:
+                            shutil.copy2(f, dest_f)
+                        except Exception:
+                            pass
 
-        # Sao chép các file giao diện HTML
+        # Sao chép toàn bộ thư mục templates (bao gồm icons, sw.js, manifest.json, các file html)
         src_tpl = int_dir / "templates"
         if src_tpl.exists():
-            for tpl in src_tpl.glob("*.html"):
-                dest_tpl = TARGET_TEMPLATES / tpl.name
-                if not dest_tpl.exists() or dest_tpl.stat().st_size == 0:
-                    shutil.copy2(tpl, dest_tpl)
+            for item in src_tpl.rglob("*"):
+                rel = item.relative_to(src_tpl)
+                dest_item = TARGET_TEMPLATES / rel
+                if item.is_dir():
+                    dest_item.mkdir(parents=True, exist_ok=True)
+                elif not dest_item.exists() or dest_item.stat().st_size == 0:
+                    dest_item.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        shutil.copy2(item, dest_item)
+                    except Exception:
+                        pass
 
 # ==============================================================================
 # 2. KHỞI TẠO MÁY CHỦ UVICORN VÀ GIAO DIỆN DESKTOP WEBVIEW
@@ -85,8 +94,16 @@ def check_port_open(host: str, port: int, timeout: float = 0.3) -> bool:
         s.settimeout(timeout)
         return s.connect_ex((host, port)) == 0
 
+def find_available_port(default_port: int = 8000) -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        if s.connect_ex(("127.0.0.1", default_port)) != 0:
+            return default_port
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
+
 class ServerWorker(threading.Thread):
-    def __init__(self, host="127.0.0.1", port=8000):
+    def __init__(self, host="0.0.0.0", port=8000):
         super().__init__(daemon=True)
         self.host = host
         self.port = port
@@ -109,21 +126,20 @@ class ServerWorker(threading.Thread):
 
 def main():
     multiprocessing.freeze_support()
-    host = "127.0.0.1"
-    port = 8000
+    port = find_available_port(8000)
     
-    server = ServerWorker(host, port)
+    server = ServerWorker(host="0.0.0.0", port=port)
     server.start()
 
     # Chờ server mở socket hoàn tất để chống lỗi trắng trang
-    for _ in range(35):
-        if check_port_open(host, port):
+    for _ in range(40):
+        if check_port_open("127.0.0.1", port):
             break
         time.sleep(0.1)
 
     window = webview.create_window(
         title="HỆ THỐNG QUẢN LÝ VÀ CHẤM THI OMR 2026",
-        url=f"http://{host}:{port}",
+        url=f"http://127.0.0.1:{port}",
         width=1440,
         height=900,
         min_size=(1024, 700),

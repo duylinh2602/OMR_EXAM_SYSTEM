@@ -110,13 +110,6 @@ def start_app():
     webview.start(gui="edgechromium", debug=False)
     sys.exit(0)
 
-    def on_closed():
-        server_thread.stop()
-
-    window.events.closed += on_closed
-    webview.start(gui="edgechromium", debug=False)
-    sys.exit(0)
-
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()

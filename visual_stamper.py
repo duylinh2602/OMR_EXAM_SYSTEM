@@ -10,6 +10,7 @@ Quy chuẩn màu sắc trực quan:
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import cv2
+import re
 import numpy as np
 
 
@@ -136,6 +137,25 @@ class VisualStamper:
                 cls._highlight_bubble(canvas, (cx, cy), cls.COLOR_YELLOW, RADIUS)
             elif stu_ans == correct_ans:
                 cls._highlight_bubble(canvas, (cx, cy), cls.COLOR_GREEN, RADIUS)
+            elif stu_ans == "MULTIPLE":
+                # TÔ ĐÚP: Học sinh tô 2 ô trở lên -> Bị phạt 0 ĐIỂM câu này!
+                # Khoanh ĐỎ vào các ô học sinh đã tô vi phạm
+                double_opts = []
+                for a in submission.get("anomalies", []):
+                    if a.get("type") == "P1_DOUBLE_FILL" and f"Câu {q_num} " in a.get("msg", ""):
+                        m = re.findall(r'\b([A-D])\b', a.get("msg", ""))
+                        if m:
+                            double_opts = m
+                        break
+                if not double_opts:
+                    double_opts = ["A", "B", "C", "D"]
+
+                for opt in double_opts:
+                    if opt in q_item["choices"]:
+                        ox, oy = map(int, map(round, q_item["choices"][opt]))
+                        cls._highlight_bubble(canvas, (ox, oy), cls.COLOR_RED, RADIUS)
+                # Đánh dấu đáp án chuẩn của barem
+                cls._highlight_bubble(canvas, (cx, cy), cls.COLOR_GREEN, RADIUS - 4 if correct_ans in double_opts else RADIUS)
             else:
                 if stu_ans in q_item["choices"]:
                     wx, wy = map(int, map(round, q_item["choices"][stu_ans]))
@@ -217,7 +237,7 @@ class VisualStamper:
             clean_digits = val_part.replace(".", "")
 
             if is_correct:
-                cls._draw_centered_text(canvas, "+0.25 d", box_cx, score_y, cv2.FONT_HERSHEY_DUPLEX, 0.75, cls.COLOR_GREEN, 2)
+                cls._draw_centered_text(canvas, "+0.25d", box_cx, score_y, cv2.FONT_HERSHEY_DUPLEX, 0.65, cls.COLOR_GREEN, 2)
                 if has_exp_minus:
                     sx, sy = map(int, map(round, q_item["sign"]))
                     cls._highlight_bubble(canvas, (sx, sy), cls.COLOR_GREEN, RADIUS)
@@ -231,7 +251,7 @@ class VisualStamper:
                         cls._highlight_bubble(canvas, (int(pos[0]), int(pos[1])), cls.COLOR_GREEN, RADIUS)
 
             elif is_blank:
-                cls._draw_centered_text(canvas, f"[Trong] DA: {exp_str}", box_cx, score_y, cv2.FONT_HERSHEY_DUPLEX, 0.55, cls.COLOR_YELLOW, 2)
+                cls._draw_centered_text(canvas, f"0d [DA: {exp_str}]", box_cx, score_y, cv2.FONT_HERSHEY_DUPLEX, 0.50, cls.COLOR_YELLOW, 2)
                 if has_exp_minus:
                     sx, sy = map(int, map(round, q_item["sign"]))
                     cls._highlight_bubble(canvas, (sx, sy), cls.COLOR_YELLOW, RADIUS)
@@ -245,7 +265,8 @@ class VisualStamper:
                         cls._highlight_bubble(canvas, (int(pos[0]), int(pos[1])), cls.COLOR_YELLOW, RADIUS)
 
             else:
-                cls._draw_centered_text(canvas, f"0d [DA: {exp_str}]", box_cx, score_y, cv2.FONT_HERSHEY_DUPLEX, 0.55, cls.COLOR_RED, 2)
+                doc_str = raw_str if raw_str else "Trống"
+                cls._draw_centered_text(canvas, f"0d [Doc: {doc_str}]", box_cx, score_y, cv2.FONT_HERSHEY_DUPLEX, 0.50, cls.COLOR_RED, 2)
                 for c_i, hits in enumerate(stu_digits_list):
                     for d_char in hits:
                         if d_char in q_item["digits"]:

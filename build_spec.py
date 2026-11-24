@@ -33,6 +33,19 @@ print("\n" + "=" * 70)
 print("[2/3] XÁC THỰC CÁC TỆP TÀI NGUYÊN BẮT BUỘC...")
 print("=" * 70)
 
+# Tự động tạo app_icon.ico từ PNG nếu chưa có
+icon_file = Path("app_icon.ico")
+if not icon_file.exists():
+    png_icon = Path("templates/icons/icon-512.png")
+    if png_icon.exists():
+        try:
+            from PIL import Image
+            img = Image.open(png_icon)
+            img.save(icon_file, format="ICO", sizes=[(16,16), (32,32), (48,48), (64,64), (128,128), (256,256)])
+            print("[✓] Đã tạo biểu tượng app_icon.ico thành công.")
+        except Exception as e:
+            print(f"[!] Không thể tạo app_icon.ico: {e}")
+
 required_data_files = [
     ("templates", "templates"),
     ("output/header_coordinates.json", "output"),
@@ -41,6 +54,12 @@ required_data_files = [
     ("output/part3_coordinates.json", "output"),
     ("output/exams_db.json", "output"),
 ]
+
+if Path("output/MAU_DAP_AN_TRAC_NGHIEM_2025.xlsx").exists():
+    required_data_files.append(("output/MAU_DAP_AN_TRAC_NGHIEM_2025.xlsx", "output"))
+
+if Path("PHIEU TLTN 40 CAU CUC QLCL.pdf").exists():
+    required_data_files.append(("PHIEU TLTN 40 CAU CUC QLCL.pdf", "output"))
 
 missing = [src for src, _ in required_data_files if not Path(src).exists()]
 if missing:
@@ -57,6 +76,9 @@ db_file = Path("output/exams_db.json")
 if not db_file.exists():
     db_file.parent.mkdir(exist_ok=True, parents=True)
     db_file.write_text('{"active_exam_id": "default_exam", "exams": {}}', encoding="utf-8")
+
+has_icon = icon_file.exists()
+icon_arg = f"'{icon_file.name}'" if has_icon else "None"
 
 spec_content = f"""# -*- mode: python ; coding: utf-8 -*-
 block_cipher = None
@@ -81,6 +103,8 @@ a = Analysis(
         'fastapi',
         'starlette',
         'pydantic',
+        'multipart',
+        'python_multipart',
         'fitz',
         'openpyxl',
         'cv2',
@@ -113,7 +137,7 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
-    icon=None
+    icon={icon_arg}
 )
 
 coll = COLLECT(
@@ -135,7 +159,7 @@ print("[3/3] TIẾN HÀNH BIÊN DỊCH VỚI PYINSTALLER...")
 print("=" * 70)
 
 try:
-    subprocess.run(["pyinstaller", "--noconfirm", "app_build.spec"], check=True)
+    subprocess.run([sys.executable, "-m", "PyInstaller", "--noconfirm", "app_build.spec"], check=True)
     print("\n" + "=" * 70)
     print("[✓] BIÊN DỊCH THÀNH CÔNG RỰC RỠ!")
     print(f"[*] Thư mục sản phẩm: {Path('dist/OMR_Desktop_App').resolve()}")

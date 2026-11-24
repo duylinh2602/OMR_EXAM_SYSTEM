@@ -65,13 +65,14 @@ def normalize_answer_keys(raw_keys: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
 
 
 class Part3ShadowfixReader:
-    def __init__(self, p3_coords: List[Dict[str, Any]], scale: float):
+    def __init__(self, p3_coords: List[Dict[str, Any]], scale: float, template_ink_map: Optional[np.ndarray] = None):
         self.coords = p3_coords
         self.scale = scale
-        self.core_r = 3.0 * scale
-        self.search_r = int(round(8.0 * scale))
+        self.core_r = 4.5 * scale
+        self.search_r = int(round(4.0 * scale))
         self.ring_in = 7.2 * scale
         self.ring_out = 10.8 * scale
+        self.template_ink_map = template_ink_map
 
     def _build_gradient_response(self, gray: np.ndarray) -> np.ndarray:
         smoothed = cv2.GaussianBlur(gray, (0, 0), sigmaX=max(0.8, 1.0 * self.scale), sigmaY=max(0.8, 1.0 * self.scale))
@@ -101,13 +102,24 @@ class Part3ShadowfixReader:
             return 0.0, (cx, cy)
         yy, xx = np.ogrid[-r:r+1, -r:r+1]
         val = float(np.mean(ink_map[cy - r:cy + r + 1, cx - r:cx + r + 1][xx * xx + yy * yy <= r * r]))
-        return val, (cx, cy)
+
+        # Trừ nền mực từ phôi gốc nếu có (chỉ trừ mực in sẵn > 0, không trừ số âm)
+        if self.template_ink_map is not None:
+            th, tw = self.template_ink_map.shape
+            if cx - r >= 0 and cy - r >= 0 and cx + r < tw and cy + r < th:
+                tpl_val = max(0.0, float(np.mean(self.template_ink_map[cy - r:cy + r + 1, cx - r:cx + r + 1][xx * xx + yy * yy <= r * r])))
+            else:
+                tpl_val = 0.0
+            net_val = max(0.0, val - tpl_val * 0.90)
+        else:
+            net_val = max(0.0, val)
+
+        return net_val, (cx, cy)
 
     def read_filtered(self, gray: np.ndarray, ink_map: np.ndarray, active_q_nums: List[int]) -> Tuple[Dict[int, Dict[str, Any]], List[Dict[str, str]]]:
         resp = self._build_gradient_response(gray)
         results = {}
         anomalies = []
-        fill_thresh = 16.0
         active_set = {int(q) for q in active_q_nums}
 
         for q in self.coords:
@@ -115,34 +127,52 @@ class Part3ShadowfixReader:
             if q_num not in active_set:
                 continue
 
-            s_val, _ = self._refine_and_score(ink_map, resp, q["sign"][0], q["sign"][1])
-            has_minus = s_val >= fill_thresh
+            q_errors = []
 
-            comma_opt = None
+            # Đọc dấu âm (-)
+            s_val, _ = self._refine_and_score(ink_map, resp, q["sign"][0], q["sign"][1])
+            has_minus = s_val >= 14.5
+
+            # Đọc dấu phẩy (,)
+            comma_hits = []
             for idx, cpos in enumerate(q["comma_positions"]):
                 c_val, _ = self._refine_and_score(ink_map, resp, cpos[0], cpos[1])
-                if c_val >= fill_thresh:
-                    comma_opt = idx + 1
+                if c_val >= 14.5:
+                    comma_hits.append(idx + 1)
 
+            if len(comma_hits) > 1:
+                q_errors.append("Tô đúp dấu phẩy")
+                comma_opt = None
+            elif len(comma_hits) == 1:
+                comma_opt = comma_hits[0]
+            else:
+                comma_opt = None
+
+            # Đọc 4 cột chữ số (0..9)
             col_digits: List[List[str]] = [[] for _ in range(4)]
             for col in range(4):
-                scores = []
+                net_scores = []
                 for d in range(10):
                     val, _ = self._refine_and_score(ink_map, resp, q["digits"][str(d)][col][0], q["digits"][str(d)][col][1])
-                    scores.append(val)
-                ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
-                top_d, top_s = ranked[0]
-                sec_d, sec_s = ranked[1]
-                hits = [str(d) for d, s in enumerate(scores) if s >= fill_thresh]
+                    net_scores.append(val)
 
-                if len(hits) > 1:
-                    col_digits[col] = hits
-                elif top_s >= fill_thresh and (top_s - sec_s) >= 9.5:
+                # Nền động cột = phân vị 60%
+                col_bg = float(np.percentile(net_scores, 60))
+                rel_scores = [max(0.0, s - col_bg) for s in net_scores]
+
+                ranked = sorted(enumerate(rel_scores), key=lambda x: x[1], reverse=True)
+                top_d, top_rel = ranked[0]
+                sec_d, sec_rel = ranked[1]
+
+                # Kết luận tô đúp
+                if top_rel >= 15.5 and sec_rel >= 14.5 and (top_rel - sec_rel) < 8.0:
+                    col_digits[col] = [str(top_d), str(sec_d)]
+                # Kết luận tô hợp lệ 1 chữ số
+                elif top_rel >= 11.5 and (top_rel - sec_rel) >= 6.5 and net_scores[top_d] >= 18.0:
                     col_digits[col] = [str(top_d)]
                 else:
                     col_digits[col] = []
 
-            q_errors = []
             col_filled = [len(digits) > 0 for digits in col_digits]
 
             for c_i, hits in enumerate(col_digits):
@@ -229,8 +259,18 @@ class FullGradingPipeline:
         with open(p3_path, "r", encoding="utf-8") as f:
             self.p3_coords = json.load(f)["questions"]
 
+        # Nạp bản đồ mực phôi gốc dùng chung cho mọi phần
+        self.template_ink_map = None
+        tpl_path = resolve_data_path("output/answer_sheet_master.png")
+        if tpl_path.exists():
+            tpl_bgr = cv2.imread(str(tpl_path))
+            if tpl_bgr is not None and tpl_bgr.shape[:2] == (CANONICAL_HEIGHT, CANONICAL_WIDTH):
+                tpl_gray = cv2.cvtColor(tpl_bgr, cv2.COLOR_BGR2GRAY)
+                tpl_bg = cv2.GaussianBlur(tpl_gray, (0, 0), sigmaX=22.0, sigmaY=22.0, borderType=cv2.BORDER_REFLECT)
+                self.template_ink_map = tpl_bg.astype(np.float32) - tpl_gray.astype(np.float32)
+
         scale = CANONICAL_WIDTH / 1434.0
-        self.p3_reader = Part3ShadowfixReader(self.p3_coords, scale)
+        self.p3_reader = Part3ShadowfixReader(self.p3_coords, scale, template_ink_map=self.template_ink_map)
         self.stamper = VisualStamper
 
         # KHÓA BỘ ĐÁP ÁN: Tuyệt đối không nạp ngầm đáp án mẫu khi đợt thi chưa cấu hình
@@ -254,7 +294,14 @@ class FullGradingPipeline:
             self.is_configured = False
 
     @staticmethod
-    def _eval_bubble_ink(ink_map: np.ndarray, cx: float, cy: float, r_core: int = 8) -> float:
+    def _eval_bubble_ink(
+        ink_map: np.ndarray,
+        cx: float,
+        cy: float,
+        r_core: int = 8,
+        template_ink_map: Optional[np.ndarray] = None,
+        tpl_coeff: float = 0.85
+    ) -> float:
         xi, yi = int(round(cx)), int(round(cy))
         h, w = ink_map.shape
         if xi - r_core < 0 or yi - r_core < 0 or xi + r_core >= w or yi + r_core >= h:
@@ -262,31 +309,49 @@ class FullGradingPipeline:
         patch = ink_map[yi - r_core : yi + r_core + 1, xi - r_core : xi + r_core + 1]
         yy, xx = np.ogrid[-r_core : r_core + 1, -r_core : r_core + 1]
         mask = (xx * xx + yy * yy) <= (r_core * r_core)
-        return float(np.mean(patch[mask]))
+        raw_val = float(np.mean(patch[mask]))
+
+        if template_ink_map is not None:
+            th, tw = template_ink_map.shape
+            if xi - r_core >= 0 and yi - r_core >= 0 and xi + r_core < tw and yi + r_core < th:
+                tpl_patch = template_ink_map[yi - r_core : yi + r_core + 1, xi - r_core : xi + r_core + 1]
+                tpl_val = max(0.0, float(np.mean(tpl_patch[mask])))
+                return max(0.0, raw_val - tpl_val * tpl_coeff)
+        return raw_val
 
     def _read_header_ink(self, ink_map: np.ndarray) -> Tuple[str, str, str, List[Dict[str, str]]]:
-        """Đọc Số báo danh và Mã đề với nguyên tắc không tự ý suy đoán."""
+        """Đọc Số báo danh và Mã đề với nguyên tắc không tự ý suy đoán, khử báo động giả."""
         anomalies = []
-        FILL_THRESH = 16.0
-        DOUBLE_THRESH = 15.0
 
         def decode_grid(cols, grid_name="SBD"):
             res = []
             for col_idx, col in enumerate(cols, start=1):
-                scores = [self._eval_bubble_ink(ink_map, col["digits"][str(d)][0], col["digits"][str(d)][1], r_core=8) for d in range(10)]
-                ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
-                top_d, top_s = ranked[0]
-                sec_d, sec_s = ranked[1]
+                raw_scores = [
+                    self._eval_bubble_ink(
+                        ink_map,
+                        col["digits"][str(d)][0],
+                        col["digits"][str(d)][1],
+                        r_core=7,
+                        template_ink_map=self.template_ink_map,
+                        tpl_coeff=0.85
+                    )
+                    for d in range(10)
+                ]
+                col_baseline = float(np.percentile(raw_scores, 50))
+                net_scores = [max(0.0, s - col_baseline) for s in raw_scores]
 
-                if top_s >= FILL_THRESH and sec_s >= DOUBLE_THRESH and (top_s - sec_s) < 8.0:
+                ranked = sorted(enumerate(net_scores), key=lambda x: x[1], reverse=True)
+                top_d, top_net = ranked[0]
+                sec_d, sec_net = ranked[1]
+                top_raw = raw_scores[top_d]
+
+                if sec_net >= 15.5 and (top_net - sec_net) < 10.0:
                     res.append(f"[{top_d}{sec_d}]")
                     anomalies.append({
                         "type": f"{grid_name}_DOUBLE_FILL",
                         "msg": f"{grid_name} Cột {col_idx} tô đúp ({top_d} và {sec_d})"
                     })
-                elif top_s >= FILL_THRESH and (top_s - sec_s) >= 7.0:
-                    res.append(str(top_d))
-                elif top_s >= 25.0:
+                elif (top_net >= 16.5 and top_raw >= 18.0) or (top_net >= 15.0 and (top_net - sec_net) >= 10.0 and top_raw >= 18.0):
                     res.append(str(top_d))
                 else:
                     res.append("?")
@@ -298,7 +363,6 @@ class FullGradingPipeline:
         if "?" in sbd or "[" in sbd:
             anomalies.append({"type": "MISSING_SBD", "msg": f"Số báo danh chưa rõ ràng ({sbd})"})
 
-        # KHỬ HOÀN TOÀN FUZZY MATCHING: Chỉ chấp nhận khi đọc rõ đủ 4 chữ số hợp lệ
         final_made = ""
         if raw_made.isdigit() and len(raw_made) == 4:
             if not self.answer_keys:
@@ -328,6 +392,13 @@ class FullGradingPipeline:
         # Nếu giáo viên cưỡng chế mã đề (sửa tay), sử dụng forced_exam_code
         if forced_exam_code and str(forced_exam_code).strip():
             exam_code = str(forced_exam_code).strip().zfill(4)
+            h_anom = [
+                a for a in h_anom
+                if not a.get("type", "").startswith("MADE_")
+                and a.get("type") not in {"INVALID_EXAM_CODE", "UNKNOWN_CODE", "NO_ANSWER_KEY"}
+            ]
+            if self.answer_keys and exam_code not in self.answer_keys:
+                h_anom.append({"type": "UNKNOWN_CODE", "msg": f"Mã đề {exam_code} không tồn tại trong barem đáp án"})
         else:
             exam_code = detected_made
 
@@ -344,32 +415,40 @@ class FullGradingPipeline:
         # 4. QUÉT PHẦN I (TRẮC NGHIỆM 4 LỰA CHỌN)
         p1_res = {}
         p1_anom = []
-        FILL_P1_THRESH = 16.0
-        MARGIN_P1 = 9.0
 
         for q in self.p1_coords:
             q_num = int(q["question"])
             if q_num not in active_p1:
                 continue
-            scores = {opt: self._eval_bubble_ink(ink_map, q["choices"][opt][0], q["choices"][opt][1], r_core=8) for opt in ["A", "B", "C", "D"]}
+            scores = {
+                opt: self._eval_bubble_ink(
+                    ink_map,
+                    q["choices"][opt][0],
+                    q["choices"][opt][1],
+                    r_core=8,
+                    template_ink_map=self.template_ink_map,
+                    tpl_coeff=0.85
+                )
+                for opt in ["A", "B", "C", "D"]
+            }
             ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
             top_opt, top_val = ranked[0]
             sec_opt, sec_val = ranked[1]
+            row_bg = float(np.percentile(list(scores.values()), 50))
+            top_rel = top_val - row_bg
 
-            if top_val < FILL_P1_THRESH:
-                p1_res[q_num] = ""
-            elif sec_val >= FILL_P1_THRESH and (top_val - sec_val) < MARGIN_P1:
+            if sec_val >= 15.5 and (top_val - sec_val) < 8.5:
                 # SỬA LỖI 1: Tô đúp gán MULTIPLE -> Tuyệt đối không cho điểm câu này
                 p1_res[q_num] = "MULTIPLE"
                 p1_anom.append({"type": "P1_DOUBLE_FILL", "msg": f"Phần I Câu {q_num} tô đúp ({top_opt} và {sec_opt})"})
-            else:
+            elif top_val >= 15.5 or (top_rel >= 11.5 and (top_val - sec_val) >= 7.5):
                 p1_res[q_num] = top_opt
+            else:
+                p1_res[q_num] = ""
 
         # 5. QUÉT PHẦN II (ĐÚNG / SAI BẬC THANG)
         p2_res = {}
         p2_anom = []
-        FILL_P2_THRESH = 16.0
-        MARGIN_P2 = 9.0
 
         for q in self.p2_coords:
             q_num = int(q["question"])
@@ -379,22 +458,15 @@ class FullGradingPipeline:
             for rk in ["a", "b", "c", "d"]:
                 tx, ty = q["rows"][rk]["true"]
                 fx, fy = q["rows"][rk]["false"]
-                st = self._eval_bubble_ink(ink_map, tx, ty, r_core=8)
-                sf = self._eval_bubble_ink(ink_map, fx, fy, r_core=8)
+                st = self._eval_bubble_ink(ink_map, tx, ty, r_core=8, template_ink_map=self.template_ink_map, tpl_coeff=0.85)
+                sf = self._eval_bubble_ink(ink_map, fx, fy, r_core=8, template_ink_map=self.template_ink_map, tpl_coeff=0.85)
 
-                if st < FILL_P2_THRESH and sf < FILL_P2_THRESH:
-                    row_dict[rk] = ""
-                elif st >= FILL_P2_THRESH and sf >= FILL_P2_THRESH:
+                if st >= 15.5 and sf >= 15.5:
                     # SỬA LỖI 1: Cả Đ và S cùng có nét chì -> Gán ĐS -> Tính 0 điểm ý này
                     row_dict[rk] = "ĐS"
                     p2_anom.append({"type": "P2_DOUBLE_FILL", "msg": f"Phần II Câu {q_num}{rk} tô cả Đúng và Sai"})
-                elif st >= FILL_P2_THRESH and (st - sf) >= MARGIN_P2:
-                    row_dict[rk] = "Đ"
-                elif sf >= FILL_P2_THRESH and (sf - st) >= MARGIN_P2:
-                    row_dict[rk] = "S"
-                elif max(st, sf) >= FILL_P2_THRESH:
+                elif max(st, sf) >= 12.0 and abs(st - sf) >= 7.5:
                     row_dict[rk] = "Đ" if st > sf else "S"
-                    p2_anom.append({"type": "P2_UNCERTAIN", "msg": f"Phần II Câu {q_num}{rk} tô mờ/chưa rõ giữa Đ và S"})
                 else:
                     row_dict[rk] = ""
             p2_res[q_num] = row_dict
@@ -462,7 +534,16 @@ class FullGradingPipeline:
         key = self.answer_keys[code_str]
         pts_p1 = float(self.config.get("pts_p1", 0.25))
         raw_p2_rule = self.config.get("pts_p2_rule", {0: 0.0, 1: 0.1, 2: 0.25, 3: 0.5, 4: 1.0})
-        p2_rule = {int(k): float(v) for k, v in raw_p2_rule.items()}
+        if isinstance(raw_p2_rule, str):
+            parts = [float(p.strip()) for p in raw_p2_rule.split(",") if p.strip()]
+            if len(parts) == 4:
+                p2_rule = {0: 0.0, 1: parts[0], 2: parts[1], 3: parts[2], 4: parts[3]}
+            else:
+                p2_rule = {0: 0.0, 1: 0.1, 2: 0.25, 3: 0.5, 4: 1.0}
+        elif isinstance(raw_p2_rule, dict):
+            p2_rule = {int(k): float(v) for k, v in raw_p2_rule.items()}
+        else:
+            p2_rule = {0: 0.0, 1: 0.1, 2: 0.25, 3: 0.5, 4: 1.0}
         pts_p3 = float(self.config.get("pts_p3", 0.25))
 
         p1_clean = {int(k): str(v).upper() for k, v in p1.items() if v}

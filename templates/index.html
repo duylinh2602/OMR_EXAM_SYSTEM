@@ -830,7 +830,7 @@ Câu 3: 42" class="w-full border rounded-xl p-3 text-xs font-mono text-slate-800
       const p3Data = {};
       for (let q in (sub.details?.part3 || {})) {
         const inp = document.getElementById(`p3_q${q}`);
-        p3Data[q] = (inp && inp.value !== "") ? parseFloat(inp.value) : (sub.details.part3[q] ? sub.details.part3[q].normalized_value : null);
+        p3Data[q] = inp ? (inp.value.trim() !== "" ? parseFloat(inp.value) : null) : (sub.details.part3[q] ? sub.details.part3[q].normalized_value : null);
       }
 
       const payload = {
