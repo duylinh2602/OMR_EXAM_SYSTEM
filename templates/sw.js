@@ -1,5 +1,5 @@
 // Service Worker cho OMR Mobile PWA
-const CACHE_NAME = 'omr-pwa-v3';
+const CACHE_NAME = 'omr-pwa-v5';
 const ASSETS_TO_CACHE = [
   '/scanner',
   '/manifest.json',
