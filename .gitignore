@@ -183,7 +183,8 @@ cython_debug/
 # Binary executables and installers
 *.exe
 dist_installer/
-output/graded_sheets/
+output/graded_sheets/*.png
+output/graded_sheets/*.webp
 output/web_uploads/
 output/*.pdf
-output/BANG_DIEM_TONG_HOP.xlsx
+output/*.xlsx

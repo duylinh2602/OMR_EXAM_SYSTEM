@@ -1131,33 +1131,45 @@ def _generate_pdf_sync(exam: Dict[str, Any]) -> Tuple[Path, str]:
     if not subs:
         raise HTTPException(status_code=400, detail="Chưa có bài thi nào trong đợt để xuất PDF.")
 
-    image_paths = []
-    for sub_id in subs.keys():
-        # Quét tìm cả định dạng ảnh .jpg mới và .png cũ
-        for ext in [".jpg", ".png"]:
-            p = GRADED_DIR / f"{sub_id}_graded{ext}"
-            if p.exists():
-                image_paths.append(p)
-                break
-
-    if not image_paths:
-        raise HTTPException(status_code=400, detail="Không tìm thấy tệp ảnh bài thi đã chấm nào trên ổ cứng.")
-
     pdf_out = Path("output/TAP_PHIEU_DA_CHAM.pdf")
 
     # Tối ưu hóa bộ nhớ RAM: Chèn ảnh trực tiếp qua page.insert_image không giải nén ma trận RGB bitmap
     # Tiết kiệm 95% RAM, chống sập OOM trên Render Free Tier và sinh PDF trong ~300ms
     doc = fitz.open()
-    for p in image_paths:
-        try:
+    for sub_id, sub in subs.items():
+        img_path = None
+        for ext in [".jpg", ".png", ".webp"]:
+            p = GRADED_DIR / f"{sub_id}_graded{ext}"
+            if p.exists():
+                img_path = p
+                break
+            p_up = UPLOAD_DIR / f"{sub_id}_aligned{ext}"
+            if p_up.exists():
+                img_path = p_up
+                break
+
+        if img_path and img_path.exists():
+            try:
+                page = doc.new_page(width=CANONICAL_WIDTH, height=CANONICAL_HEIGHT)
+                page.insert_image(fitz.Rect(0, 0, CANONICAL_WIDTH, CANONICAL_HEIGHT), filename=str(img_path))
+            except Exception as page_err:
+                print(f"[!] Bỏ qua ảnh lỗi {img_path.name}: {page_err}")
+        else:
+            # Fallback nếu tệp ảnh chưa đồng bộ về ổ cứng: Tạo trang tổng hợp thông tin bài chấm
             page = doc.new_page(width=CANONICAL_WIDTH, height=CANONICAL_HEIGHT)
-            page.insert_image(fitz.Rect(0, 0, CANONICAL_WIDTH, CANONICAL_HEIGHT), filename=str(p))
-        except Exception as page_err:
-            print(f"[!] Bỏ qua ảnh lỗi {p.name}: {page_err}")
+            sc = sub.get("scores", {})
+            title_text = f"KET QUA BAI THI: {sub.get('file_name', sub_id)}"
+            sbd_text = f"SBD: {sub.get('sbd', '---')}  |  Ma de: {sub.get('exam_code', '---')}  |  Trang thai: {sub.get('status', 'GRADED')}"
+            score_text = f"TONG DIEM: {sc.get('total', 0.0):.2f} / 10  (P1: {sc.get('p1', 0.0)} d, P2: {sc.get('p2', 0.0)} d, P3: {sc.get('p3', 0.0)} d)"
+            page.insert_text(fitz.Point(100, 200), title_text, fontsize=28, color=(0, 0, 0))
+            page.insert_text(fitz.Point(100, 260), sbd_text, fontsize=20, color=(0.2, 0.2, 0.2))
+            page.insert_text(fitz.Point(100, 320), score_text, fontsize=24, color=(0.8, 0, 0))
 
     if len(doc) == 0:
-        raise HTTPException(status_code=500, detail="Không thể tạo trang PDF từ các ảnh bài thi.")
+        page = doc.new_page(width=CANONICAL_WIDTH, height=CANONICAL_HEIGHT)
+        page.insert_text(fitz.Point(100, 200), "Chua co bai thi nao trong he thong", fontsize=24)
 
+    page_count = len(doc)
     try:
         doc.save(str(pdf_out), deflate=True)
     except PermissionError:
@@ -1170,7 +1182,7 @@ def _generate_pdf_sync(exam: Dict[str, Any]) -> Tuple[Path, str]:
     sub_name = sanitize_ascii_filename(info.get("subject", "MON"))
     class_name = sanitize_ascii_filename(info.get("class_name", "LOP"))
     download_name = f"TAP_PHIEU_DA_CHAM_{sub_name}_{class_name}.pdf"
-    print(f"[OK] Da xuat thanh cong tap PDF gom {len(image_paths)} trang: {pdf_out.name}")
+    print(f"[OK] Da xuat thanh cong tap PDF gom {page_count} trang: {pdf_out.name}")
     return pdf_out, download_name
 
 
