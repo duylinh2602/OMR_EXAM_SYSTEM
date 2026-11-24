@@ -14,6 +14,7 @@ import os
 import sys
 import io
 import json
+import math
 import re
 import time
 import uuid
@@ -42,13 +43,39 @@ import openpyxl
 from pydantic import BaseModel
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
 from align_sheet_v2 import CANONICAL_HEIGHT, CANONICAL_WIDTH, align_sheet_4band
 from exam_manager import ExamManager
 from full_grading_pipeline import FullGradingPipeline, normalize_answer_keys
 from quality_gate import ImageQualityAssessment
 from visual_stamper import VisualStamper
+
+
+# ==============================================================================
+# HELPER: Chuyển đổi an toàn các kiểu NumPy → JSON-serializable (Chống HTTP 500)
+# ==============================================================================
+def to_json_safe(obj):
+    """Đệ quy chuyển đổi mọi kiểu NumPy/NaN thành kiểu Python thuần để json.dump không lỗi."""
+    if isinstance(obj, dict):
+        return {str(k): to_json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [to_json_safe(v) for v in obj]
+    if isinstance(obj, np.ndarray):
+        return [to_json_safe(v) for v in obj.tolist()]
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.floating,)):
+        v = float(obj)
+        if math.isnan(v) or math.isinf(v):
+            return 0.0
+        return v
+    if isinstance(obj, (np.bool_,)):
+        return bool(obj)
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return 0.0
+    return obj
 
 app = FastAPI(title="OMR Grading System 2026", version="6.9.0")
 
@@ -225,7 +252,7 @@ def save_to_disk():
             # 2. Ghi ra tệp tạm và fsync
             tmp_file = DB_FILE.parent / f".exams_db.json.{uuid.uuid4().hex}.tmp"
             with open(tmp_file, "w", encoding="utf-8") as f:
-                json.dump(DB_DATA, f, ensure_ascii=False, indent=2)
+                json.dump(to_json_safe(DB_DATA), f, ensure_ascii=False, indent=2)
                 f.flush()
                 os.fsync(f.fileno())
 
@@ -398,24 +425,33 @@ async def health_check():
 
 @app.get("/api/session")
 async def get_session():
-    exam = get_current_exam()
-    all_exams_summary = [
-        {
-            "id": eid,
-            "title": f"{edata['exam_info']['subject']} - {edata['exam_info']['period']} ({edata['exam_info']['class_name']})",
-            "submission_count": len(edata.get("submissions", {})),
-            "created_at": edata.get("created_at", ""),
-            "is_active": (eid == DB_DATA["active_exam_id"])
-        }
-        for eid, edata in DB_DATA["exams"].items()
-    ]
-    return JSONResponse(content={
-        "active_exam_id": DB_DATA["active_exam_id"],
-        "exam_info": exam.get("exam_info"),
-        "exam_data": exam.get("exam_data"),
-        "submissions": list(exam.get("submissions", {}).values()),
-        "all_exams": all_exams_summary
-    }, headers=NO_CACHE_HEADERS)
+    try:
+        exam = get_current_exam()
+        all_exams_summary = []
+        for eid, edata in DB_DATA["exams"].items():
+            info = edata.get("exam_info") or {}
+            title = f"{info.get('subject', 'Môn học')} - {info.get('period', 'Kiểm tra')} ({info.get('class_name', '')})"
+            all_exams_summary.append({
+                "id": eid,
+                "title": title,
+                "submission_count": len(edata.get("submissions", {})),
+                "created_at": edata.get("created_at", ""),
+                "is_active": (eid == DB_DATA["active_exam_id"])
+            })
+        response_data = to_json_safe({
+            "active_exam_id": DB_DATA["active_exam_id"],
+            "exam_info": exam.get("exam_info"),
+            "exam_data": exam.get("exam_data"),
+            "submissions": list(exam.get("submissions", {}).values()),
+            "all_exams": all_exams_summary
+        })
+        return JSONResponse(content=response_data, headers=NO_CACHE_HEADERS)
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse(
+            content={"active_exam_id": None, "exam_info": {}, "exam_data": None, "submissions": [], "all_exams": [], "error": str(e)},
+            headers=NO_CACHE_HEADERS
+        )
 
 
 @app.post("/api/create-exam")
@@ -581,7 +617,7 @@ def _process_and_save(img_bgr: np.ndarray, file_name: str, sub_id: str, exam: Di
         cv2.imwrite(str(preview_webp), res["graded_image_bgr"], [cv2.IMWRITE_WEBP_QUALITY, 80])
         del res["graded_image_bgr"]
 
-        exam["submissions"][sub_id] = res
+        exam["submissions"][sub_id] = to_json_safe(res)
         return res
 
     except HTTPException:

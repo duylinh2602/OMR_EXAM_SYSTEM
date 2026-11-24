@@ -1081,7 +1081,8 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
       let minSumTL = Infinity, minSumTR = Infinity, minSumBR = Infinity, minSumBL = Infinity;
 
       for (const c of candidates) {
-        const qBonus = Math.min(60, c.score * 0.4);
+        // qBonus giảm ảnh hưởng điểm tương phản để tọa độ góc thực sự chiếm ưu thế (tránh ô đen Phần III cướp góc BL)
+        const qBonus = Math.min(15, c.score * 0.1);
         // Góc trên-trái: x < 0.42*W, y < 0.35*H
         if (c.x < 0.42 * W && c.y < 0.35 * H) {
           const s = (c.x + c.y) - qBonus;
@@ -1182,8 +1183,8 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
                   }
                 });
 
-                // Điều kiện công nhận: khóa đủ 4 mốc góc + ít nhất 3/6 mốc cạnh (bắt buộc có ít nhất 1 mốc M2)
-                if (matchedIntermediates.length >= 3 && hasM2) {
+                // Điều kiện công nhận: khóa đủ 4 mốc góc + ít nhất 3/6 mốc cạnh (bắt buộc có mốc M2 và có mốc ở cả 2 bên lề trái & phải)
+                if (matchedIntermediates.length >= 3 && hasM2 && matchedLeft >= 1 && matchedRight >= 1) {
                   isValidSheet = true;
                   // Chuẩn hóa tọa độ 4 góc hợp lệ theo kích thước video gốc (0.0 -> 1.0)
                   const normPt = (pt) => {
@@ -1352,16 +1353,12 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
       if (labelM0) labelM0.className = "w-full text-center text-[9px] text-rose-400/80 font-mono tracking-widest mt-1";
       if (labelM4) labelM4.className = "w-full text-center text-[9px] text-rose-400/80 font-mono tracking-widest mb-1";
 
+      // Khi chưa đủ mốc hoặc chưa hợp lệ: 4 góc reticle giữ màu đỏ tuyệt đối (unmatched)
       Object.keys(reticleMap).forEach(id => {
         const el = document.getElementById(id);
         if (el) {
-          if (reticleMap[id]) {
-            el.classList.remove("unmatched");
-            el.classList.add("matched");
-          } else {
-            el.classList.remove("matched");
-            el.classList.add("unmatched");
-          }
+          el.classList.remove("matched");
+          el.classList.add("unmatched");
         }
       });
     }

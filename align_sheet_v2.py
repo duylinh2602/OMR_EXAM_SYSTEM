@@ -65,9 +65,21 @@ def detect_fiducial_squares(gray: np.ndarray) -> List[Tuple[float, float, float,
     """
     Quét tìm các ứng viên mốc vuông đen trên toàn trang, kể cả khi chụp camera có nền bàn.
     Sử dụng cv2.RETR_LIST để không bị mất các mốc nằm bên trong viền giấy.
+    Tối ưu: downscale ảnh lớn về max 750px để tăng tốc 2-4x.
     """
     h, w = gray.shape
-    blur = cv2.GaussianBlur(gray, (3, 3), 0)
+    max_dim = max(h, w)
+
+    # Downscale nếu ảnh lớn để tăng tốc xử lý
+    if max_dim > 800:
+        ds_scale = 750.0 / max_dim
+        small = cv2.resize(gray, (int(round(w * ds_scale)), int(round(h * ds_scale))), interpolation=cv2.INTER_AREA)
+    else:
+        ds_scale = 1.0
+        small = gray
+
+    sh, sw = small.shape
+    blur = cv2.GaussianBlur(small, (3, 3), 0)
     
     # Kết hợp hai ngưỡng thích ứng để bắt mốc trong mọi điều kiện ánh sáng
     thresh1 = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 31, 7)
@@ -79,10 +91,12 @@ def detect_fiducial_squares(gray: np.ndarray) -> List[Tuple[float, float, float,
     cnts, _ = cv2.findContours(closed, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
     cands = []
-    min_dim = min(h, w)
-    min_side = max(6, int(round(min_dim * 0.005)))
-    max_side = max(50, int(round(min_dim * 0.08)))
+    min_dim_img = min(sh, sw)
+    min_side = max(6, int(round(min_dim_img * 0.005)))
+    max_side = max(50, int(round(min_dim_img * 0.08)))
 
+    # Lọc ứng viên theo giấy trắng: tìm vùng sáng bao quanh mốc
+    # (giúp loại bỏ blob trên nền bàn gỗ sẫm)
     for c in cnts:
         x, y, cw, ch = cv2.boundingRect(c)
         if cw < min_side or ch < min_side or cw > max_side or ch > max_side:
@@ -92,7 +106,27 @@ def detect_fiducial_squares(gray: np.ndarray) -> List[Tuple[float, float, float,
             area = cv2.contourArea(c)
             extent = area / float(cw * ch)
             if extent > 0.45:
-                cands.append((float(x + cw / 2.0), float(y + ch / 2.0), float(cw), float(ch)))
+                # Kiểm tra vùng bao quanh có nền sáng (giấy trắng) không
+                cx_s = float(x + cw / 2.0)
+                cy_s = float(y + ch / 2.0)
+                pad_ring = max(cw, ch)
+                rx0 = max(0, x - pad_ring)
+                ry0 = max(0, y - pad_ring)
+                rx1 = min(sw, x + cw + pad_ring)
+                ry1 = min(sh, y + ch + pad_ring)
+                ring_patch = small[ry0:ry1, rx0:rx1]
+                if ring_patch.size > 0:
+                    ring_bright = float(np.percentile(ring_patch, 75))
+                    core_patch = small[y:y+ch, x:x+cw]
+                    core_dark = float(np.mean(core_patch))
+                    contrast = ring_bright - core_dark
+                    # Chấp nhận: vùng bao quanh sáng >= 120 VÀ tương phản >= 15
+                    # HOẶC tương phản rất cao >= 35 (mốc rõ nét dù nền không hoàn toàn trắng)
+                    if (ring_bright >= 120 and contrast >= 15) or contrast >= 35:
+                        # Scale coords back
+                        cands.append((cx_s / ds_scale, cy_s / ds_scale, float(cw) / ds_scale, float(ch) / ds_scale))
+                else:
+                    cands.append((cx_s / ds_scale, cy_s / ds_scale, float(cw) / ds_scale, float(ch) / ds_scale))
     return cands
 
 
@@ -441,6 +475,22 @@ def verify_and_refine_10_markers(canvas_bgr: np.ndarray) -> Tuple[bool, np.ndarr
     ]:
         p0 = ref_list[0] if valid_flags[0] else (float(tpl_list[0][0]), float(tpl_list[0][1]))
         p4 = ref_list[4] if valid_flags[4] else (float(tpl_list[4][0]), float(tpl_list[4][1]))
+
+        # Kiểm tra collinearity: 5 mốc cùng bên phải nằm gần 1 đường thẳng
+        valid_xs = [ref_list[i][0] for i in range(5) if valid_flags[i]]
+        valid_ys = [ref_list[i][1] for i in range(5) if valid_flags[i]]
+        if len(valid_xs) >= 3:
+            poly_line = np.polyfit(valid_ys, valid_xs, 1)
+            x_pred = np.polyval(poly_line, valid_ys)
+            x_errs = np.abs(np.array(valid_xs) - x_pred)
+            # Nếu có mốc lệch > 18px khỏi đường hồi quy, đánh dấu invalid và nội suy lại
+            for vi, (vy, xerr) in enumerate(zip(valid_ys, x_errs)):
+                if xerr > 18.0:
+                    # Tìm index gốc tương ứng
+                    orig_idx = [i for i in range(5) if valid_flags[i]][vi]
+                    if orig_idx not in (0, 4):
+                        valid_flags[orig_idx] = False
+
         for i in range(1, 4):
             if not valid_flags[i]:
                 t = m_ratios[i]
@@ -451,7 +501,21 @@ def verify_and_refine_10_markers(canvas_bgr: np.ndarray) -> Tuple[bool, np.ndarr
     ref_left = np.array(ref_left, dtype=np.float32)
     ref_right = np.array(ref_right, dtype=np.float32)
 
-    # Nắn tinh chỉnh 4 dải (4-band perspective refinement) bằng cv2.INTER_LINEAR tốc độ cao
+    # Nắn tinh chỉnh 4 dải (4-band perspective refinement)
+    # Kiểm tra offset lệch: nếu bất kỳ mốc nào lệch > 35px so với template,
+    # giữ flat 4-corner warp thay vì warp 4-band (tránh vặn méo Phần III)
+    max_offset = 0.0
+    for i in range(5):
+        dx_l = abs(ref_left[i][0] - float(TPL_LEFT_5[i][0]))
+        dy_l = abs(ref_left[i][1] - float(TPL_LEFT_5[i][1]))
+        dx_r = abs(ref_right[i][0] - float(TPL_RIGHT_5[i][0]))
+        dy_r = abs(ref_right[i][1] - float(TPL_RIGHT_5[i][1]))
+        max_offset = max(max_offset, dx_l, dy_l, dx_r, dy_r)
+
+    if max_offset > 35.0:
+        # Mốc lệch quá nhiều → giữ flat canvas (đã warp 4-corner ở bước trước)
+        return True, canvas_bgr
+
     refined_canvas = np.zeros_like(canvas_bgr)
     band_bounds = [
         (0, int(round(TPL_LEFT_5[1, 1]))),
@@ -500,30 +564,44 @@ def align_sheet_4band(image_path: Union[str, Path, np.ndarray], output_path: Uni
 
     # TẦNG 0: NẾU CÓ HINT_CORNERS TỪ MOBILE CAMERA SCANNER ĐÃ KHÓA CHUẨN
     if hint_corners is not None and len(hint_corners) == 4:
-        raw_gray = cv2.cvtColor(raw_bgr, cv2.COLOR_BGR2GRAY)
-        cands = detect_fiducial_squares(raw_gray)
-        refined_corners = []
-        for hx, hy in hint_corners:
-            best_c = None
-            min_d = 75.0
-            for cx, cy, cw, ch in cands:
-                d = np.hypot(cx - hx, cy - hy)
-                if d < min_d:
-                    min_d = d
-                    best_c = (cx, cy)
-            if best_c is not None:
-                refined_corners.append(best_c)
-            else:
-                refined_corners.append((hx, hy))
-        refined_corners = np.array(refined_corners, dtype=np.float32)
+        # Kiểm tra hình học cơ bản trước khi trust hint_corners
+        hc = hint_corners
+        w_top = np.linalg.norm(hc[1] - hc[0])
+        w_bot = np.linalg.norm(hc[2] - hc[3])
+        h_left = np.linalg.norm(hc[3] - hc[0])
+        h_right = np.linalg.norm(hc[2] - hc[1])
+        avg_w_hc = (w_top + w_bot) / 2.0
+        avg_h_hc = (h_left + h_right) / 2.0
+        ratio_hc = avg_h_hc / avg_w_hc if avg_w_hc > 0 else 0
+        edge_diff_w = abs(w_top - w_bot) / avg_w_hc if avg_w_hc > 0 else 1
+        edge_diff_h = abs(h_left - h_right) / avg_h_hc if avg_h_hc > 0 else 1
+        hint_valid = (1.10 <= ratio_hc <= 1.80 and edge_diff_w <= 0.28 and edge_diff_h <= 0.28 and avg_w_hc >= 100)
 
-        H_hint = cv2.getPerspectiveTransform(refined_corners, tpl_corners)
-        canvas_hint = cv2.warpPerspective(raw_bgr, H_hint, (out_w, out_h), flags=cv2.INTER_LINEAR)
-        ok, refined_canvas = verify_and_refine_10_markers(canvas_hint)
-        if ok:
-            output_path.parent.mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(str(output_path), refined_canvas)
-            return refined_canvas
+        if hint_valid:
+            raw_gray = cv2.cvtColor(raw_bgr, cv2.COLOR_BGR2GRAY)
+            cands = detect_fiducial_squares(raw_gray)
+            refined_corners = []
+            for hx, hy in hint_corners:
+                best_c = None
+                min_d = 75.0
+                for cx, cy, cw, ch in cands:
+                    d = np.hypot(cx - hx, cy - hy)
+                    if d < min_d:
+                        min_d = d
+                        best_c = (cx, cy)
+                if best_c is not None:
+                    refined_corners.append(best_c)
+                else:
+                    refined_corners.append((hx, hy))
+            refined_corners = np.array(refined_corners, dtype=np.float32)
+
+            H_hint = cv2.getPerspectiveTransform(refined_corners, tpl_corners)
+            canvas_hint = cv2.warpPerspective(raw_bgr, H_hint, (out_w, out_h), flags=cv2.INTER_LINEAR)
+            ok, refined_canvas = verify_and_refine_10_markers(canvas_hint)
+            if ok:
+                output_path.parent.mkdir(exist_ok=True, parents=True)
+                cv2.imwrite(str(output_path), refined_canvas)
+                return refined_canvas
 
     # 1. Tự động xoay và tìm 4 mốc góc OMR thích ứng với camera di động
     image_bgr, corners_4 = auto_orient_sheet_robust(raw_bgr)

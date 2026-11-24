@@ -117,7 +117,14 @@ class Part3ShadowfixReader:
         return net_val, (cx, cy)
 
     def read_filtered(self, gray: np.ndarray, ink_map: np.ndarray, active_q_nums: List[int]) -> Tuple[Dict[int, Dict[str, Any]], List[Dict[str, str]]]:
-        resp = self._build_gradient_response(gray)
+        # Tối ưu: Chỉ tính gradient response cho vùng Phần III (Y từ 1680 trở đi)
+        y_start = 1680
+        h_full, w_full = gray.shape[:2]
+        gray_p3 = gray[y_start:h_full, :]
+        resp_p3 = self._build_gradient_response(gray_p3)
+        resp = np.zeros((h_full, w_full), dtype=np.float32)
+        resp[y_start:h_full, :] = resp_p3
+
         results = {}
         anomalies = []
         active_set = {int(q) for q in active_q_nums}
@@ -286,6 +293,17 @@ class FullGradingPipeline:
         self.p3_reader = Part3ShadowfixReader(self.p3_coords, scale, template_ink_map=self.template_ink_map)
         self.stamper = VisualStamper
 
+        # Precompute kernel và penalty grid cho dò tâm nhanh
+        self._kernel_cache = {}
+        for rc in [7, 8]:
+            yy_c, xx_c = np.ogrid[-rc : rc + 1, -rc : rc + 1]
+            c_mask = (xx_c * xx_c + yy_c * yy_c <= rc * rc).astype(np.float32)
+            c_mask /= float(c_mask.sum())
+            self._kernel_cache[rc] = c_mask
+
+        yy_p, xx_p = np.mgrid[-8:9:2, -8:9:2]
+        self._penalty_grid_8 = (0.2 * np.hypot(xx_p, yy_p)).astype(np.float32)
+
         # KHÓA BỘ ĐÁP ÁN: Tuyệt đối không nạp ngầm đáp án mẫu khi đợt thi chưa cấu hình
         if exam_data and exam_data.get("answer_keys"):
             self.exam_name = exam_data.get("exam_name", "Kiểm tra trắc nghiệm")
@@ -342,8 +360,7 @@ class FullGradingPipeline:
     ) -> float:
         """
         Dò tâm ô tròn bán kính rộng (Bubble Center Snapping):
-        Quét dịch tâm trong [-search_r, +search_r] bước 2px, trừ template phôi gốc (hệ số 0.85)
-        và trừ phạt khoảng cách nhẹ 0.2 * dist để khóa chính xác vết chì ngay cả khi rung tay.
+        Vectorized 2D grid lookup không dùng vòng lặp Python, tăng tốc 5-10x.
         """
         xi0, yi0 = int(round(cx)), int(round(cy))
         h, w = ink_map.shape
@@ -362,24 +379,27 @@ class FullGradingPipeline:
         else:
             patch_net = np.maximum(0.0, patch_ink)
 
-        yy, xx = np.ogrid[-r_core : r_core + 1, -r_core : r_core + 1]
-        core_mask = (xx * xx + yy * yy <= r_core * r_core).astype(np.float32)
-        c_sum = float(core_mask.sum())
-        if c_sum > 0:
-            core_mask /= c_sum
+        core_mask = self._kernel_cache.get(r_core)
+        if core_mask is None:
+            yy, xx = np.ogrid[-r_core : r_core + 1, -r_core : r_core + 1]
+            core_mask = (xx * xx + yy * yy <= r_core * r_core).astype(np.float32)
+            c_sum = float(core_mask.sum())
+            if c_sum > 0:
+                core_mask /= c_sum
+            self._kernel_cache[r_core] = core_mask
 
         core_resp = cv2.filter2D(patch_net, -1, core_mask)
 
-        best_val = 0.0
-        center_idx = pad
-        for dy in range(-search_r, search_r + 1, 2):
-            for dx in range(-search_r, search_r + 1, 2):
-                val = float(core_resp[center_idx + dy, center_idx + dx])
-                dist_penalty = 0.2 * np.hypot(dx, dy)
-                adjusted_val = max(0.0, val - dist_penalty)
-                if adjusted_val > best_val:
-                    best_val = adjusted_val
-        return best_val
+        # Lấy lưới mẫu với bước nhảy 2px xung quanh tâm pad
+        sample_grid = core_resp[pad - search_r : pad + search_r + 1 : 2, pad - search_r : pad + search_r + 1 : 2]
+        if search_r == 8 and hasattr(self, "_penalty_grid_8"):
+            penalties = self._penalty_grid_8
+        else:
+            yy_p, xx_p = np.mgrid[-search_r : search_r + 1 : 2, -search_r : search_r + 1 : 2]
+            penalties = 0.2 * np.hypot(xx_p, yy_p).astype(np.float32)
+
+        adjusted = np.maximum(0.0, sample_grid - penalties)
+        return float(np.max(adjusted))
 
     def _read_header_ink(self, ink_map: np.ndarray) -> Tuple[str, str, str, List[Dict[str, str]]]:
         """Đọc Số báo danh và Mã đề với Bubble Center Snapping và thích ứng phân vị động."""

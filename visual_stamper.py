@@ -33,9 +33,16 @@ class VisualStamper:
         if cx - radius < 0 or cy - radius < 0 or cx + radius >= w or cy + radius >= h:
             return
 
-        overlay = canvas.copy()
-        cv2.circle(overlay, (cx, cy), radius, color, -1, cv2.LINE_AA)
-        cv2.addWeighted(overlay, alpha, canvas, 1.0 - alpha, 0, canvas)
+        # Tối ưu: Chỉ copy ROI nhỏ thay vì toàn bộ canvas (~13MB/lần → ~2KB/lần)
+        pad = radius + 3
+        x1 = max(0, cx - pad)
+        y1 = max(0, cy - pad)
+        x2 = min(w, cx + pad + 1)
+        y2 = min(h, cy + pad + 1)
+        roi = canvas[y1:y2, x1:x2]
+        overlay_roi = roi.copy()
+        cv2.circle(overlay_roi, (cx - x1, cy - y1), radius, color, -1, cv2.LINE_AA)
+        cv2.addWeighted(overlay_roi, alpha, roi, 1.0 - alpha, 0, roi)
         cv2.circle(canvas, (cx, cy), radius, color, 2, cv2.LINE_AA)
 
     @classmethod
