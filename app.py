@@ -40,7 +40,7 @@ import fitz  # PyMuPDF
 import numpy as np
 import openpyxl
 from pydantic import BaseModel
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, Response
 
@@ -504,12 +504,12 @@ async def delete_exam(exam_id: str):
 # 4. ROUTE CHẤM THI TUẦN TỰ & TỐI ƯU HÓA KHÔNG GIAN LƯU TRỮ
 # ==============================================================================
 
-def _process_and_save(img_bgr: np.ndarray, file_name: str, sub_id: str, exam: Dict[str, Any]) -> Dict[str, Any]:
+def _process_and_save(img_bgr: np.ndarray, file_name: str, sub_id: str, exam: Dict[str, Any], hint_corners: Optional[np.ndarray] = None) -> Dict[str, Any]:
     """
     Hàm lõi chấm thi - Tối ưu hóa lưu trữ 96%:
     1. Giới hạn độ phân giải ảnh thô đầu vào nếu quá lớn (max 2600px).
     2. Tiền kiểm định chất lượng ảnh (Quality Gate) trước khi nắn mốc.
-    3. Nắn phẳng phối cảnh đa tầng.
+    3. Nắn phẳng phối cảnh đa tầng (sử dụng hint_corners từ camera nếu có).
     4. Lưu ảnh nắn phẳng dạng JPEG Quality 92 (~450KB).
     5. Xóa tệp ảnh thô _raw sau khi đã nắn xong để tiết kiệm 100% dung lượng dư thừa.
     6. Lưu ảnh tem bút đỏ dạng JPEG Quality 90 (~480KB) và bản nén WebP Quality 80 (~180KB).
@@ -520,6 +520,8 @@ def _process_and_save(img_bgr: np.ndarray, file_name: str, sub_id: str, exam: Di
     if max_dim > 2600:
         scale = 2600.0 / max_dim
         img_bgr = cv2.resize(img_bgr, (int(round(w * scale)), int(round(h * scale))), interpolation=cv2.INTER_AREA)
+        if hint_corners is not None:
+            hint_corners = hint_corners * scale
 
     # 2. Tiền kiểm định chất lượng ảnh (Quality Gate) trước khi nắn mốc
     is_valid, q_report = ImageQualityAssessment.evaluate(img_bgr)
@@ -536,8 +538,8 @@ def _process_and_save(img_bgr: np.ndarray, file_name: str, sub_id: str, exam: Di
     cv2.imwrite(str(temp_raw), img_bgr, [cv2.IMWRITE_JPEG_QUALITY, 90])
 
     try:
-        # Nắn ảnh và tự xoay 4 hướng
-        align_sheet_4band(temp_raw, temp_aligned)
+        # Nắn ảnh và tự xoay 4 hướng (truyền hint_corners nếu có)
+        align_sheet_4band(temp_raw, temp_aligned, hint_corners=hint_corners)
         target_img = cv2.imread(str(temp_aligned))
 
         if target_img is None:
@@ -597,7 +599,7 @@ def _process_and_save(img_bgr: np.ndarray, file_name: str, sub_id: str, exam: Di
 
 
 @app.post("/api/grade-single-file")
-async def grade_single_file(file: UploadFile = File(...)):
+async def grade_single_file(file: UploadFile = File(...), corners: Optional[str] = Form(None)):
     exam = get_current_exam()
 
     if not exam.get("exam_info", {}).get("is_configured", False) or not exam.get("exam_data", {}).get("answer_keys"):
@@ -642,7 +644,21 @@ async def grade_single_file(file: UploadFile = File(...)):
         if img_bgr is None:
             raise HTTPException(status_code=400, detail="Không thể giải mã file ảnh.")
         sub_id = str(uuid.uuid4())[:8]
-        res = _process_and_save(img_bgr, file.filename, sub_id, exam)
+
+        hint_corners = None
+        if corners:
+            try:
+                c_data = json.loads(corners)
+                if isinstance(c_data, list) and len(c_data) == 4:
+                    orig_h, orig_w = img_bgr.shape[:2]
+                    hint_corners = np.array([
+                        [float(pt[0]) * orig_w, float(pt[1]) * orig_h]
+                        for pt in c_data
+                    ], dtype=np.float32)
+            except Exception as e:
+                print(f"[!] Lỗi phân tích hint_corners: {e}")
+
+        res = _process_and_save(img_bgr, file.filename, sub_id, exam, hint_corners=hint_corners)
         new_subs.append(res)
 
     save_to_disk()

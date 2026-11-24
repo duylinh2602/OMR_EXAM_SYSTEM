@@ -423,6 +423,7 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
     let isGrading = false;
     let opticalInterval = null;
     let lock4Frames = 0;
+    let lastValidCornersNorm = null;
     let deferredPrompt = null;
     let latestSubId = null;
     let isTorchOn = false;
@@ -897,10 +898,10 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
             if (aspect >= 0.55 && aspect <= 1.80) {
               const fillDensity = pCount / (bw * bh);
               if (fillDensity >= 0.48) {
-                // Kiểm tra vành giấy trắng bao quanh (mở rộng 4px quanh bounding box)
+                // Kiểm tra vành giấy bao quanh (mở rộng quanh bounding box)
                 let coreSum = 0, coreCount = 0;
-                let ringSum = 0, ringCount = 0;
-                let ringSatSum = 0;
+                const ringLums = [];
+                let paperCount = 0;
                 const midX = (minX + maxX) / 2;
                 const midY = (minY + maxY) / 2;
                 const rCore = Math.max(bw, bh) * 0.35;
@@ -920,28 +921,37 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
                     if (d <= rCore) {
                       coreSum += gVal; coreCount++;
                     } else if (d >= rIn && d <= rOut) {
-                      ringSum += gVal; ringCount++;
                       const dI = pI * 4;
                       const r = data[dI], g = data[dI + 1], b = data[dI + 2];
-                      ringSatSum += (Math.max(r, g, b) - Math.min(r, g, b));
+                      const sat = Math.max(r, g, b) - Math.min(r, g, b);
+                      ringLums.push(gVal);
+                      if (gVal >= 85 && sat <= 65) {
+                        paperCount++;
+                      }
                     }
                   }
                 }
 
-                const coreLum = coreCount > 0 ? (coreSum / coreCount) : 0;
-                const ringLum = ringCount > 0 ? (ringSum / ringCount) : 0;
-                const ringSat = ringCount > 0 ? (ringSatSum / ringCount) : 0;
-
-                // Điều kiện chuẩn: vành giấy trắng ringLum >= 90 (chấp nhận bóng râm nhẹ),
-                // độ bão hòa màu sat <= 50 (loại trừ da người, gỗ màu), tương phản ringLum - coreLum >= 22
-                if (ringLum >= 90 && ringSat <= 50 && (ringLum - coreLum) >= 22) {
-                  candidates.push({
-                    x: midX,
-                    y: midY,
-                    bw: bw,
-                    bh: bh,
-                    score: ringLum - coreLum
-                  });
+                if (coreCount > 0 && ringLums.length > 0) {
+                  const coreLum = coreSum / coreCount;
+                  const paperRatio = paperCount / ringLums.length;
+                  // Ít nhất 45% số pixel vùng bao quanh là giấy sáng (lum >= 85, sat <= 65)
+                  if (paperRatio >= 0.45) {
+                    ringLums.sort((a, b) => a - b);
+                    const p75Idx = Math.floor(ringLums.length * 0.75);
+                    const ringP75 = ringLums[p75Idx];
+                    const contrast = ringP75 - coreLum;
+                    // Hiệu tương phản giữa nhóm pixel sáng nhất (percentile 75) với lõi đen >= 22
+                    if (contrast >= 22) {
+                      candidates.push({
+                        x: midX,
+                        y: midY,
+                        bw: bw,
+                        bh: bh,
+                        score: contrast
+                      });
+                    }
+                  }
                 }
               }
             }
@@ -1005,42 +1015,84 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
         if (avgW >= 0.48 * W && avgH >= 0.48 * H) {
           const ratio = avgH / avgW;
           if (ratio >= 1.12 && ratio <= 1.82) {
-            if (Math.abs(wTop - wBot) / avgW <= 0.32 && Math.abs(hLeft - hRight) / avgH <= 0.32) {
-              quadValid = true;
+            // Chênh lệch chiều dài 2 cạnh đối diện không vượt quá 18% (chặn tứ giác méo)
+            const maxW = Math.max(wTop, wBot);
+            const maxH = Math.max(hLeft, hRight);
+            if ((Math.abs(wTop - wBot) / maxW <= 0.18) && (Math.abs(hLeft - hRight) / maxH <= 0.18)) {
+              // Kiểm tra tất cả 4 góc trong của tứ giác nằm trong khoảng [72°, 108°]
+              const getAngleDeg = (p1, pCenter, p2) => {
+                const v1x = p1.x - pCenter.x, v1y = p1.y - pCenter.y;
+                const v2x = p2.x - pCenter.x, v2y = p2.y - pCenter.y;
+                const dot = v1x * v2x + v1y * v2y;
+                const m1 = Math.hypot(v1x, v1y), m2 = Math.hypot(v2x, v2y);
+                if (m1 === 0 || m2 === 0) return 0;
+                const cosVal = Math.max(-1, Math.min(1, dot / (m1 * m2)));
+                return Math.acos(cosVal) * (180 / Math.PI);
+              };
 
-              // Xác thực 3 cặp mốc trung gian: t = 0.324 (M1), 0.543 (M2), 0.682 (M3)
-              const m_ratios = [0.324, 0.543, 0.682];
-              let hasM2 = false;
+              const angTL = getAngleDeg(TR, TL, BL);
+              const angTR = getAngleDeg(TL, TR, BR);
+              const angBR = getAngleDeg(TR, BR, BL);
+              const angBL = getAngleDeg(BR, BL, TL);
 
-              m_ratios.forEach((t, mIdx) => {
-                const predX_L = TL.x + t * (BL.x - TL.x);
-                const predY_L = TL.y + t * (BL.y - TL.y);
-                for (const cand of candidates) {
-                  if (cand === TL || cand === BL || cand === TR || cand === BR) continue;
-                  if (Math.hypot(cand.x - predX_L, cand.y - predY_L) <= 18.0) {
-                    matchedIntermediates.push({ x: cand.x, y: cand.y, isM2: (mIdx === 1) });
-                    if (mIdx === 1) hasM2 = true;
-                    break;
+              if (angTL >= 72 && angTL <= 108 &&
+                  angTR >= 72 && angTR <= 108 &&
+                  angBR >= 72 && angBR <= 108 &&
+                  angBL >= 72 && angBL <= 108) {
+                quadValid = true;
+
+                // Xác thực 3 cặp mốc trung gian: t = 0.324 (M1), 0.543 (M2), 0.682 (M3)
+                const m_ratios = [0.324, 0.543, 0.682];
+                let hasM2 = false;
+                let matchedLeft = 0;
+                let matchedRight = 0;
+
+                m_ratios.forEach((t, mIdx) => {
+                  const predX_L = TL.x + t * (BL.x - TL.x);
+                  const predY_L = TL.y + t * (BL.y - TL.y);
+                  for (const cand of candidates) {
+                    if (cand === TL || cand === BL || cand === TR || cand === BR) continue;
+                    if (Math.hypot(cand.x - predX_L, cand.y - predY_L) <= 18.0) {
+                      matchedIntermediates.push({ x: cand.x, y: cand.y, isM2: (mIdx === 1) });
+                      matchedLeft++;
+                      if (mIdx === 1) hasM2 = true;
+                      break;
+                    }
                   }
-                }
-              });
+                });
 
-              m_ratios.forEach((t, mIdx) => {
-                const predX_R = TR.x + t * (BR.x - TR.x);
-                const predY_R = TR.y + t * (BR.y - TR.y);
-                for (const cand of candidates) {
-                  if (cand === TL || cand === BL || cand === TR || cand === BR) continue;
-                  if (Math.hypot(cand.x - predX_R, cand.y - predY_R) <= 18.0) {
-                    matchedIntermediates.push({ x: cand.x, y: cand.y, isM2: (mIdx === 1) });
-                    if (mIdx === 1) hasM2 = true;
-                    break;
+                m_ratios.forEach((t, mIdx) => {
+                  const predX_R = TR.x + t * (BR.x - TR.x);
+                  const predY_R = TR.y + t * (BR.y - TR.y);
+                  for (const cand of candidates) {
+                    if (cand === TL || cand === BL || cand === TR || cand === BR) continue;
+                    if (Math.hypot(cand.x - predX_R, cand.y - predY_R) <= 18.0) {
+                      matchedIntermediates.push({ x: cand.x, y: cand.y, isM2: (mIdx === 1) });
+                      matchedRight++;
+                      if (mIdx === 1) hasM2 = true;
+                      break;
+                    }
                   }
-                }
-              });
+                });
 
-              // Điều kiện công nhận: đủ 4 góc VÀ khớp ít nhất 3/6 mốc trung gian (bắt buộc có mốc M2)
-              if (matchedIntermediates.length >= 3 && hasM2) {
-                isValidSheet = true;
+                // Điều kiện công nhận:
+                // - Phải khớp ít nhất 4/6 mốc trung gian
+                // - Cạnh trái tối thiểu 2/3 mốc
+                // - Cạnh phải tối thiểu 2/3 mốc
+                // - Bắt buộc có ít nhất 1 mốc M2 (t = 0.543)
+                if (matchedIntermediates.length >= 4 && matchedLeft >= 2 && matchedRight >= 2 && hasM2) {
+                  isValidSheet = true;
+                  // Chuẩn hóa tọa độ 4 góc hợp lệ theo kích thước video gốc (0.0 -> 1.0)
+                  const normPt = (pt) => {
+                    const vx = sx + (pt.x / W) * sw;
+                    const vy = sy + (pt.y / H) * sh;
+                    return [
+                      Math.max(0, Math.min(1, vx / vw)),
+                      Math.max(0, Math.min(1, vy / vh))
+                    ];
+                  };
+                  lastValidCornersNorm = [normPt(TL), normPt(TR), normPt(BR), normPt(BL)];
+                }
               }
             }
           }
@@ -1244,6 +1296,10 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
     async function postGradeImageBlob(blobOrFile, filename) {
       const fd = new FormData();
       fd.append("file", blobOrFile, filename);
+      if (lastValidCornersNorm) {
+        fd.append("corners", JSON.stringify(lastValidCornersNorm));
+        lastValidCornersNorm = null;
+      }
 
       try {
         const res = await fetch("/api/grade-single-file", { method: "POST", body: fd });

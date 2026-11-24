@@ -152,7 +152,23 @@ def find_adaptive_4_corners(cands: List[Tuple[float, ...]], w: int, h: int) -> O
             continue
 
         area = avg_w * avg_h
-        score = area / (1.0 + abs(ratio - 1.444) * 6.0)
+        tpl_corners = np.array([
+            TPL_LEFT_5[0], TPL_RIGHT_5[0],
+            TPL_RIGHT_5[4], TPL_LEFT_5[4]
+        ], dtype=np.float32)
+        H_proj = cv2.getPerspectiveTransform(tpl_corners, quad)
+        test_pts = np.vstack([TPL_LEFT_5[1:4], TPL_RIGHT_5[1:4]]).reshape(1, -1, 2)
+        mapped = cv2.perspectiveTransform(test_pts, H_proj)[0]
+
+        matched_inter = 0
+        search_radius = max(18.0, min(avg_w, avg_h) * 0.04)
+        for mx, my in mapped:
+            for cx, cy, cw, ch in cands:
+                if np.hypot(cx - mx, cy - my) <= search_radius:
+                    matched_inter += 1
+                    break
+
+        score = (area / (1.0 + abs(ratio - 1.444) * 6.0)) + (matched_inter * (area * 0.25))
         if score > best_score:
             best_score = score
             best_quad = np.array([p_tl, p_tr, p_br, p_bl], dtype=np.float32)
@@ -327,53 +343,120 @@ def detect_a4_paper_contour(gray: np.ndarray) -> Optional[np.ndarray]:
     return None
 
 
-def verify_aligned_omr_template(canvas_bgr: np.ndarray) -> bool:
+def verify_and_refine_10_markers(canvas_bgr: np.ndarray) -> Tuple[bool, np.ndarray]:
     """
-    Xác thực nghiêm ngặt ảnh sau khi nắn phẳng có đúng là phiếu trả lời trắc nghiệm Bộ GD&ĐT hay không.
-    Kiểm tra:
-    1. Độ sáng trung bình toàn trang >= 135 (bảo đảm là giấy trắng).
-    2. Kiểm tra 10 vị trí mốc chuẩn (5 mốc trái TPL_LEFT_5 và 5 mốc phải TPL_RIGHT_5):
-       Tại mỗi mốc, vùng lõi đen (r=9) phải tối hơn rõ rệt so với vành giấy trắng xung quanh (r=16..26)
-       với độ tương phản chênh lệch ít nhất 35 đơn vị, và độ sáng vành giấy >= 135.
-    3. Phải có ít nhất 7/10 mốc đạt chuẩn mới công nhận là phiếu OMR hợp lệ.
+    Xác thực nghiêm ngặt ảnh sau khi nắn phẳng và nắn tinh chỉnh 10 mốc 4 dải:
+    1. Độ sáng trung bình toàn trang >= 105 (bảo đảm là giấy sáng).
+    2. Quét vùng lân cận ±30px tại 10 mốc chuẩn (5 mốc trái TPL_LEFT_5 và 5 mốc phải TPL_RIGHT_5).
+       Tìm tâm tối nhất (lõi 7x7px) và so sánh với vành giấy xung quanh (r=16..24px).
+       Mốc hợp lệ khi core_mean < 135.0, contrast = ring_p75 - core_mean >= 18.0, core_mean < 0.82 * ring_p75.
+    3. Phiếu hợp lệ khi có ít nhất 6/10 mốc đạt chuẩn và ít nhất 3/4 mốc góc đạt chuẩn.
+    4. Nắn tinh chỉnh 4 dải (4-band perspective refinement) bằng chính các tâm mốc vừa định vị,
+       giúp sai số tọa độ các ô trả lời < 2px.
     """
     if canvas_bgr is None or canvas_bgr.shape[:2] != (CANONICAL_HEIGHT, CANONICAL_WIDTH):
-        return False
+        return False, canvas_bgr
 
     gray = cv2.cvtColor(canvas_bgr, cv2.COLOR_BGR2GRAY)
     mean_lum = float(np.mean(gray))
-    if mean_lum < 135.0:
-        return False
+    if mean_lum < 105.0:
+        return False, canvas_bgr
 
-    r_core = 9
+    kernel_7 = np.ones((7, 7), dtype=np.float32) / 49.0
     r_in = 16
-    r_out = 26
+    r_out = 24
 
-    yy, xx = np.ogrid[-r_out : r_out + 1, -r_out : r_out + 1]
-    dist_sq = xx * xx + yy * yy
-    mask_core = dist_sq <= (r_core * r_core)
-    mask_ring = (dist_sq >= (r_in * r_in)) & (dist_sq <= (r_out * r_out))
+    ref_left = []
+    ref_right = []
+    valid_count = 0
+    corner_valid = 0
 
-    valid_markers = 0
-    all_markers = np.vstack([TPL_LEFT_5, TPL_RIGHT_5])
+    for side, tpl_list, ref_list in [('L', TPL_LEFT_5, ref_left), ('R', TPL_RIGHT_5, ref_right)]:
+        for idx, pt in enumerate(tpl_list):
+            cx, cy = int(round(pt[0])), int(round(pt[1]))
+            x0, x1 = max(0, cx - 30), min(CANONICAL_WIDTH, cx + 31)
+            y0, y1 = max(0, cy - 30), min(CANONICAL_HEIGHT, cy + 31)
+            patch = gray[y0:y1, x0:x1]
+            if patch.shape[0] < 15 or patch.shape[1] < 15:
+                ref_list.append((float(cx), float(cy)))
+                continue
 
-    for pt in all_markers:
-        cx, cy = int(round(pt[0])), int(round(pt[1]))
-        if cx - r_out < 0 or cy - r_out < 0 or cx + r_out >= CANONICAL_WIDTH or cy + r_out >= CANONICAL_HEIGHT:
-            continue
+            blur = cv2.filter2D(patch.astype(np.float32), -1, kernel_7)
+            b = 7
+            if blur.shape[0] > 2 * b and blur.shape[1] > 2 * b:
+                inner = blur[b:-b, b:-b]
+                min_pos = np.unravel_index(np.argmin(inner), inner.shape)
+                best_y = y0 + b + min_pos[0]
+                best_x = x0 + b + min_pos[1]
+            else:
+                best_y, best_x = cy, cx
 
-        patch = gray[cy - r_out : cy + r_out + 1, cx - r_out : cx + r_out + 1]
-        core_mean = float(np.mean(patch[mask_core]))
-        ring_mean = float(np.mean(patch[mask_ring]))
+            core_patch = gray[max(0, best_y - 3):min(CANONICAL_HEIGHT, best_y + 4),
+                              max(0, best_x - 3):min(CANONICAL_WIDTH, best_x + 4)]
+            core_mean = float(np.mean(core_patch)) if core_patch.size > 0 else 255.0
 
-        # Mốc đạt chuẩn: lõi tối < 135, vành giấy sáng >= 135, chênh lệch tương phản >= 35
-        if core_mean < 135.0 and ring_mean >= 135.0 and (ring_mean - core_mean) >= 35.0:
-            valid_markers += 1
+            ry0, ry1 = max(0, best_y - r_out), min(CANONICAL_HEIGHT, best_y + r_out + 1)
+            rx0, rx1 = max(0, best_x - r_out), min(CANONICAL_WIDTH, best_x + r_out + 1)
+            patch_ring = gray[ry0:ry1, rx0:rx1]
 
-    return valid_markers >= 7
+            gy, gx = np.ogrid[ry0 - best_y : ry1 - best_y, rx0 - best_x : rx1 - best_x]
+            d = np.hypot(gx, gy)
+            ring_mask = (d >= r_in) & (d <= r_out)
+
+            if np.any(ring_mask):
+                ring_vals = patch_ring[ring_mask]
+                p75 = float(np.percentile(ring_vals, 75))
+            else:
+                p75 = 0.0
+
+            contrast = p75 - core_mean
+            if core_mean < 135.0 and contrast >= 18.0 and core_mean < 0.82 * p75:
+                valid_count += 1
+                if idx in (0, 4):
+                    corner_valid += 1
+                ref_list.append((float(best_x), float(best_y)))
+            else:
+                ref_list.append((float(cx), float(cy)))
+
+    ref_left = np.array(ref_left, dtype=np.float32)
+    ref_right = np.array(ref_right, dtype=np.float32)
+
+    is_valid = (valid_count >= 6 and corner_valid >= 3)
+    if not is_valid:
+        return False, canvas_bgr
+
+    # Nắn tinh chỉnh 4 dải (4-band perspective refinement)
+    refined_canvas = np.zeros_like(canvas_bgr)
+    band_bounds = [
+        (0, int(round(TPL_LEFT_5[1, 1]))),
+        (int(round(TPL_LEFT_5[1, 1])), int(round(TPL_LEFT_5[2, 1]))),
+        (int(round(TPL_LEFT_5[2, 1])), int(round(TPL_LEFT_5[3, 1]))),
+        (int(round(TPL_LEFT_5[3, 1])), CANONICAL_HEIGHT),
+    ]
+    for b_idx in range(4):
+        src_quad = np.array([
+            ref_left[b_idx], ref_right[b_idx],
+            ref_right[b_idx + 1], ref_left[b_idx + 1]
+        ], dtype=np.float32)
+        dst_quad = np.array([
+            TPL_LEFT_5[b_idx], TPL_RIGHT_5[b_idx],
+            TPL_RIGHT_5[b_idx + 1], TPL_LEFT_5[b_idx + 1]
+        ], dtype=np.float32)
+        H_band = cv2.getPerspectiveTransform(src_quad, dst_quad)
+        warped_band = cv2.warpPerspective(canvas_bgr, H_band, (CANONICAL_WIDTH, CANONICAL_HEIGHT), flags=cv2.INTER_CUBIC)
+        y0, y1 = band_bounds[b_idx]
+        refined_canvas[y0:y1, :] = warped_band[y0:y1, :]
+
+    return True, refined_canvas
 
 
-def align_sheet_4band(image_path: Path, output_path: Path) -> np.ndarray:
+def verify_aligned_omr_template(canvas_bgr: np.ndarray) -> bool:
+    """Wrapper tương thích ngược trả về True/False."""
+    is_valid, _ = verify_and_refine_10_markers(canvas_bgr)
+    return is_valid
+
+
+def align_sheet_4band(image_path: Path, output_path: Path, hint_corners: Optional[np.ndarray] = None) -> np.ndarray:
     """Nắn phẳng phối cảnh đa tầng sau khi đã tự động chuẩn hóa chiều đứng."""
     raw_bgr = cv2.imread(str(image_path))
     if raw_bgr is None:
@@ -384,6 +467,33 @@ def align_sheet_4band(image_path: Path, output_path: Path) -> np.ndarray:
         TPL_LEFT_5[0], TPL_RIGHT_5[0],
         TPL_RIGHT_5[4], TPL_LEFT_5[4]
     ], dtype=np.float32)
+
+    # TẦNG 0: NẾU CÓ HINT_CORNERS TỪ MOBILE CAMERA SCANNER ĐÃ KHÓA CHUẨN
+    if hint_corners is not None and len(hint_corners) == 4:
+        raw_gray = cv2.cvtColor(raw_bgr, cv2.COLOR_BGR2GRAY)
+        cands = detect_fiducial_squares(raw_gray)
+        refined_corners = []
+        for hx, hy in hint_corners:
+            best_c = None
+            min_d = 55.0
+            for cx, cy, cw, ch in cands:
+                d = np.hypot(cx - hx, cy - hy)
+                if d < min_d:
+                    min_d = d
+                    best_c = (cx, cy)
+            if best_c is not None:
+                refined_corners.append(best_c)
+            else:
+                refined_corners.append((hx, hy))
+        refined_corners = np.array(refined_corners, dtype=np.float32)
+
+        H_hint = cv2.getPerspectiveTransform(refined_corners, tpl_corners)
+        canvas_hint = cv2.warpPerspective(raw_bgr, H_hint, (out_w, out_h), flags=cv2.INTER_CUBIC)
+        ok, refined_canvas = verify_and_refine_10_markers(canvas_hint)
+        if ok:
+            output_path.parent.mkdir(exist_ok=True, parents=True)
+            cv2.imwrite(str(output_path), refined_canvas)
+            return refined_canvas
 
     # 1. Tự động xoay và tìm 4 mốc góc OMR thích ứng với camera di động
     image_bgr, corners_4 = auto_orient_sheet_robust(raw_bgr)
@@ -420,19 +530,21 @@ def align_sheet_4band(image_path: Path, output_path: Path) -> np.ndarray:
             y0, y1 = band_bounds[b_idx]
             canvas[y0:y1, :] = warped_band[y0:y1, :]
 
-        if verify_aligned_omr_template(canvas):
+        ok, refined_canvas = verify_and_refine_10_markers(canvas)
+        if ok:
             output_path.parent.mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(str(output_path), canvas)
-            return canvas
+            cv2.imwrite(str(output_path), refined_canvas)
+            return refined_canvas
 
     # TẦNG 2: NẮN 4 MỐC GÓC OMR THÍCH ỨNG (DÀNH CHO CAMERA DI ĐỘNG CẦM TAY)
     if corners_4 is not None:
         H_corners = cv2.getPerspectiveTransform(corners_4, tpl_corners)
         canvas = cv2.warpPerspective(image_bgr, H_corners, (out_w, out_h), flags=cv2.INTER_CUBIC)
-        if verify_aligned_omr_template(canvas):
+        ok, refined_canvas = verify_and_refine_10_markers(canvas)
+        if ok:
             output_path.parent.mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(str(output_path), canvas)
-            return canvas
+            cv2.imwrite(str(output_path), refined_canvas)
+            return refined_canvas
 
     # TẦNG 3: DỰ PHÒNG VIỀN GIẤY A4 TRÊN NỀN BÀN (CHỈ CHẤP NHẬN NẾU ĐẠT XÁC THỰC MỐC PHIẾU OMR)
     paper_corners = detect_a4_paper_contour(gray)
@@ -443,10 +555,11 @@ def align_sheet_4band(image_path: Path, output_path: Path) -> np.ndarray:
         ], dtype=np.float32)
         H_paper = cv2.getPerspectiveTransform(paper_corners, dst_a4)
         canvas_a4 = cv2.warpPerspective(image_bgr, H_paper, (out_w, out_h), flags=cv2.INTER_CUBIC)
-        if verify_aligned_omr_template(canvas_a4):
+        ok, refined_canvas = verify_and_refine_10_markers(canvas_a4)
+        if ok:
             output_path.parent.mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(str(output_path), canvas_a4)
-            return canvas_a4
+            cv2.imwrite(str(output_path), refined_canvas)
+            return refined_canvas
 
     raise RuntimeError(
         "NOT_OMR_SHEET: Không nhận diện được đúng mẫu phiếu trả lời trắc nghiệm Bộ GD&ĐT. "
