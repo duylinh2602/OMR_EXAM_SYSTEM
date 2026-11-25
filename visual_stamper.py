@@ -220,7 +220,27 @@ class VisualStamper:
                 is_valid = stu_item.get("is_valid", False)
                 stu_v = stu_item.get("normalized_value")
                 raw_str = stu_item.get("raw_string", "")
-                stu_digits_list = stu_item.get("digits", [[], [], [], []])
+                stu_digits_list = stu_item.get("digits")
+                if not stu_digits_list and raw_str:
+                    # Khôi phục danh sách ô đã tô từ raw_string (VD: "-1,2[34]_") để chấm đỏ chuẩn xác
+                    s_clean = raw_str.lstrip("-").replace(",", "")
+                    stu_digits_list = []
+                    idx_s = 0
+                    while idx_s < len(s_clean) and len(stu_digits_list) < 4:
+                        ch = s_clean[idx_s]
+                        if ch == "[":
+                            end_b = s_clean.find("]", idx_s)
+                            if end_b != -1:
+                                stu_digits_list.append(list(s_clean[idx_s + 1:end_b]))
+                                idx_s = end_b + 1
+                                continue
+                        elif ch == "_":
+                            stu_digits_list.append([])
+                        elif ch.isdigit():
+                            stu_digits_list.append([ch])
+                        idx_s += 1
+                elif not stu_digits_list:
+                    stu_digits_list = [[], [], [], []]
             elif isinstance(stu_item, (int, float)):
                 stu_v = float(stu_item)
                 is_valid = True

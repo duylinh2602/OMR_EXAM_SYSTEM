@@ -42,11 +42,11 @@ import fitz  # PyMuPDF
 import numpy as np
 import openpyxl
 from pydantic import BaseModel
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
-from align_sheet_v2 import CANONICAL_HEIGHT, CANONICAL_WIDTH, align_sheet_4band
+from align_sheet_v2 import CANONICAL_HEIGHT, CANONICAL_WIDTH, align_sheet_4band, align_sheet_from_array
 from exam_manager import ExamManager
 from full_grading_pipeline import FullGradingPipeline, normalize_answer_keys
 from quality_gate import ImageQualityAssessment
@@ -250,10 +250,11 @@ def save_to_disk():
                 except Exception:
                     pass
 
-            # 2. Ghi ra tệp tạm và fsync
+            # 2. Ghi ra tệp tạm dạng JSON rút gọn (không indent) và fsync
             tmp_file = DB_FILE.parent / f".exams_db.json.{uuid.uuid4().hex}.tmp"
+            safe_db = to_json_safe(DB_DATA)
             with open(tmp_file, "w", encoding="utf-8") as f:
-                json.dump(to_json_safe(DB_DATA), f, ensure_ascii=False, indent=2)
+                f.write(json.dumps(safe_db, ensure_ascii=False, separators=(",", ":")))
                 f.flush()
                 os.fsync(f.fileno())
 
@@ -554,15 +555,35 @@ async def delete_exam(exam_id: str):
 # 4. ROUTE CHẤM THI TUẦN TỰ & TỐI ƯU HÓA KHÔNG GIAN LƯU TRỮ
 # ==============================================================================
 
-def _process_and_save(img_bgr: np.ndarray, file_name: str, sub_id: str, exam: Dict[str, Any], hint_corners: Optional[np.ndarray] = None) -> Dict[str, Any]:
+def _save_submission_artifacts_bg(sub_id: str, aligned_bgr: np.ndarray, graded_bgr: np.ndarray):
+    """Lưu ảnh đã nắn phẳng, ảnh đóng dấu bút đỏ (JPEG Quality 82) và DB ở tác vụ nền."""
+    try:
+        aligned_path = UPLOAD_DIR / f"{sub_id}_aligned.jpg"
+        cv2.imwrite(str(aligned_path), aligned_bgr, [cv2.IMWRITE_JPEG_QUALITY, 82])
+
+        graded_path = GRADED_DIR / f"{sub_id}_graded.jpg"
+        cv2.imwrite(str(graded_path), graded_bgr, [cv2.IMWRITE_JPEG_QUALITY, 82])
+    except Exception as e:
+        print(f"[!] Lỗi lưu ảnh nền cho bài {sub_id}: {e}")
+    finally:
+        save_to_disk()
+
+
+def _process_and_save(
+    img_bgr: np.ndarray,
+    file_name: str,
+    sub_id: str,
+    exam: Dict[str, Any],
+    hint_corners: Optional[np.ndarray] = None,
+    background_tasks: Optional[BackgroundTasks] = None
+) -> Dict[str, Any]:
     """
-    Hàm lõi chấm thi - Tối ưu hóa lưu trữ 96%:
+    Hàm lõi chấm thi - Xử lý thuần trong RAM & đẩy ghi đĩa sang BackgroundTasks:
     1. Giới hạn độ phân giải ảnh thô đầu vào nếu quá lớn (max 2600px).
     2. Tiền kiểm định chất lượng ảnh (Quality Gate) trước khi nắn mốc.
-    3. Nắn phẳng phối cảnh đa tầng (sử dụng hint_corners từ camera nếu có).
-    4. Lưu ảnh nắn phẳng dạng JPEG Quality 92 (~450KB).
-    5. Xóa tệp ảnh thô _raw sau khi đã nắn xong để tiết kiệm 100% dung lượng dư thừa.
-    6. Lưu ảnh tem bút đỏ dạng JPEG Quality 90 (~480KB) và bản nén WebP Quality 80 (~180KB).
+    3. Nắn phẳng phối cảnh đa tầng trực tiếp trong RAM qua align_sheet_from_array.
+    4. Chấm bài và đóng dấu bút đỏ trong RAM.
+    5. Lưu tệp ảnh JPEG 82 + DB qua BackgroundTasks (không tạo WebP đồng bộ).
     """
     # 1. Giới hạn độ phân giải ảnh đầu vào nếu là ảnh chụp siêu lớn từ điện thoại
     h, w = img_bgr.shape[:2]
@@ -581,61 +602,35 @@ def _process_and_save(img_bgr: np.ndarray, file_name: str, sub_id: str, exam: Di
         user_friendly_msg = f"Ảnh không đạt chuẩn kiểm định ({reason_str}). Vui lòng chụp lại rõ nét và đủ sáng."
         raise HTTPException(status_code=422, detail=user_friendly_msg)
 
-    temp_raw = UPLOAD_DIR / f"{sub_id}_raw.jpg"
-    temp_aligned = UPLOAD_DIR / f"{sub_id}_aligned.jpg"
-    
-    # Ghi ảnh raw dạng JPEG chất lượng cao
-    cv2.imwrite(str(temp_raw), img_bgr, [cv2.IMWRITE_JPEG_QUALITY, 90])
-
     try:
-        # Nắn ảnh và tự xoay 4 hướng (truyền hint_corners nếu có)
-        align_sheet_4band(temp_raw, temp_aligned, hint_corners=hint_corners)
-        target_img = cv2.imread(str(temp_aligned))
-
+        # 3. Nắn ảnh thuần trong RAM và tự xoay 4 hướng
+        target_img = align_sheet_from_array(img_bgr, hint_corners=hint_corners)
         if target_img is None:
-            raise RuntimeError("ALIGNMENT_FAILED: Không thể đọc ảnh sau khi nắn phẳng.")
+            raise RuntimeError("ALIGNMENT_FAILED: Không thể nắn phẳng ảnh.")
 
-        # Xóa file raw sau khi nắn thành công để tiết kiệm dung lượng đĩa
-        if temp_raw.exists():
-            try:
-                temp_raw.unlink()
-            except Exception:
-                pass
-
-        # Chấm bài bằng lõi quang học Ink Map
+        # 4. Chấm bài bằng lõi quang học Ink Map
         res = pipeline.process_sheet(target_img, file_name)
         res["submission_id"] = sub_id
         res["original_filename"] = file_name
         res["has_error"] = False
         res["quality_metrics"] = q_report.get("metrics", {})
 
-        # Lưu ảnh đã chấm dạng JPEG Quality 90 sắc nét nhưng dung lượng siêu nhẹ (~450KB)
-        graded_path = GRADED_DIR / f"{sub_id}_graded.jpg"
-        cv2.imwrite(str(graded_path), res["graded_image_bgr"], [cv2.IMWRITE_JPEG_QUALITY, 90])
-        
-        # Sinh bản xem trước WebP Quality 80 phục vụ hiển thị mượt mà (~180KB)
-        preview_webp = GRADED_DIR / f"{sub_id}_preview.webp"
-        cv2.imwrite(str(preview_webp), res["graded_image_bgr"], [cv2.IMWRITE_WEBP_QUALITY, 80])
-        del res["graded_image_bgr"]
+        graded_bgr = res.pop("graded_image_bgr")
+        safe_res = to_json_safe(res)
+        exam["submissions"][sub_id] = safe_res
 
-        exam["submissions"][sub_id] = to_json_safe(res)
-        return res
+        # 5. Đẩy I/O đĩa sang BackgroundTasks để trả JSON điểm tức thì
+        if background_tasks is not None:
+            background_tasks.add_task(_save_submission_artifacts_bg, sub_id, target_img, graded_bgr)
+        else:
+            _save_submission_artifacts_bg(sub_id, target_img, graded_bgr)
+
+        return safe_res
 
     except HTTPException:
         raise
     except Exception as err:
         traceback.print_exc()
-        if temp_raw.exists():
-            try:
-                temp_raw.unlink()
-            except Exception:
-                pass
-        if temp_aligned.exists():
-            try:
-                temp_aligned.unlink()
-            except Exception:
-                pass
-
         err_msg = str(err)
         if "NOT_OMR_SHEET" in err_msg:
             user_friendly_msg = "Không nhận diện được đúng mẫu phiếu trả lời trắc nghiệm Bộ GD&ĐT. Hãy đảm bảo đưa đúng phiếu thi vào khung ngắm."
@@ -649,7 +644,7 @@ def _process_and_save(img_bgr: np.ndarray, file_name: str, sub_id: str, exam: Di
 
 
 @app.post("/api/grade-single-file")
-async def grade_single_file(file: UploadFile = File(...), corners: Optional[str] = Form(None)):
+async def grade_single_file(background_tasks: BackgroundTasks, file: UploadFile = File(...), corners: Optional[str] = Form(None)):
     exam = get_current_exam()
 
     if not exam.get("exam_info", {}).get("is_configured", False) or not exam.get("exam_data", {}).get("answer_keys"):
@@ -672,7 +667,7 @@ async def grade_single_file(file: UploadFile = File(...), corners: Optional[str]
                 sub_id = str(uuid.uuid4())[:8]
                 page_name = f"{file.filename}_Trang_{page_idx + 1}"
                 try:
-                    res = _process_and_save(img_bgr, page_name, sub_id, exam)
+                    res = _process_and_save(img_bgr, page_name, sub_id, exam, background_tasks=background_tasks)
                     new_subs.append(res)
                 except HTTPException as e:
                     print(f"[!] Trang {page_idx + 1} bị bỏ qua do lỗi: {e.detail}")
@@ -708,10 +703,9 @@ async def grade_single_file(file: UploadFile = File(...), corners: Optional[str]
             except Exception as e:
                 print(f"[!] Lỗi phân tích hint_corners: {e}")
 
-        res = _process_and_save(img_bgr, file.filename, sub_id, exam, hint_corners=hint_corners)
+        res = _process_and_save(img_bgr, file.filename, sub_id, exam, hint_corners=hint_corners, background_tasks=background_tasks)
         new_subs.append(res)
 
-    save_to_disk()
     return {
         "status": "SUCCESS",
         "new_submissions": new_subs,

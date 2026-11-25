@@ -237,8 +237,7 @@ class Part3ShadowfixReader:
                 "raw_string": raw_str,
                 "normalized_value": norm_val,
                 "is_valid": is_valid,
-                "anomalies": q_errors,
-                "digits": col_digits
+                "anomalies": q_errors
             }
 
         return results, anomalies

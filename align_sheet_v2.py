@@ -477,17 +477,17 @@ def verify_and_refine_10_markers(canvas_bgr: np.ndarray) -> Tuple[bool, np.ndarr
         p4 = ref_list[4] if valid_flags[4] else (float(tpl_list[4][0]), float(tpl_list[4][1]))
 
         # Kiểm tra collinearity: 5 mốc cùng bên phải nằm gần 1 đường thẳng
-        valid_xs = [ref_list[i][0] for i in range(5) if valid_flags[i]]
-        valid_ys = [ref_list[i][1] for i in range(5) if valid_flags[i]]
-        if len(valid_xs) >= 3:
+        valid_indices = [i for i in range(5) if valid_flags[i]]
+        valid_xs = [ref_list[i][0] for i in valid_indices]
+        valid_ys = [ref_list[i][1] for i in valid_indices]
+        if len(valid_indices) >= 3:
             poly_line = np.polyfit(valid_ys, valid_xs, 1)
             x_pred = np.polyval(poly_line, valid_ys)
             x_errs = np.abs(np.array(valid_xs) - x_pred)
             # Nếu có mốc lệch > 18px khỏi đường hồi quy, đánh dấu invalid và nội suy lại
-            for vi, (vy, xerr) in enumerate(zip(valid_ys, x_errs)):
+            for vi, xerr in enumerate(x_errs):
                 if xerr > 18.0:
-                    # Tìm index gốc tương ứng
-                    orig_idx = [i for i in range(5) if valid_flags[i]][vi]
+                    orig_idx = valid_indices[vi]
                     if orig_idx not in (0, 4):
                         valid_flags[orig_idx] = False
 
@@ -546,16 +546,11 @@ def verify_aligned_omr_template(canvas_bgr: np.ndarray) -> bool:
     return is_valid
 
 
-def align_sheet_4band(image_path: Union[str, Path, np.ndarray], output_path: Union[str, Path], hint_corners: Optional[np.ndarray] = None) -> Union[np.ndarray, Tuple[None, str]]:
-    """Nắn phẳng phối cảnh đa tầng sau khi đã tự động chuẩn hóa chiều đứng."""
-    if isinstance(image_path, np.ndarray):
-        raw_bgr = image_path.copy()
-    else:
-        raw_bgr = cv2.imread(str(image_path))
-        if raw_bgr is None:
-            raise FileNotFoundError(f"Không tìm thấy file: {image_path}")
+def align_sheet_from_array(raw_bgr: np.ndarray, hint_corners: Optional[np.ndarray] = None) -> np.ndarray:
+    """Nắn phẳng phối cảnh đa tầng thuần trong RAM, không đọc/ghi đĩa, trả về canvas (1769 x 2526)."""
+    if raw_bgr is None or raw_bgr.size == 0:
+        raise RuntimeError("ALIGNMENT_FAILED: Ảnh đầu vào rỗng.")
 
-    output_path = Path(output_path)
     out_w, out_h = CANONICAL_WIDTH, CANONICAL_HEIGHT
     tpl_corners = np.array([
         TPL_LEFT_5[0], TPL_RIGHT_5[0],
@@ -599,8 +594,6 @@ def align_sheet_4band(image_path: Union[str, Path, np.ndarray], output_path: Uni
             canvas_hint = cv2.warpPerspective(raw_bgr, H_hint, (out_w, out_h), flags=cv2.INTER_LINEAR)
             ok, refined_canvas = verify_and_refine_10_markers(canvas_hint)
             if ok:
-                output_path.parent.mkdir(exist_ok=True, parents=True)
-                cv2.imwrite(str(output_path), refined_canvas)
                 return refined_canvas
 
     # 1. Tự động xoay và tìm 4 mốc góc OMR thích ứng với camera di động
@@ -634,24 +627,20 @@ def align_sheet_4band(image_path: Union[str, Path, np.ndarray], output_path: Uni
                 TPL_RIGHT_5[b_idx + 1], TPL_LEFT_5[b_idx + 1]
             ], dtype=np.float32)
             H = cv2.getPerspectiveTransform(src_quad, dst_quad)
-            warped_band = cv2.warpPerspective(image_bgr, H, (out_w, out_h), flags=cv2.INTER_CUBIC)
+            warped_band = cv2.warpPerspective(image_bgr, H, (out_w, out_h), flags=cv2.INTER_LINEAR)
             y0, y1 = band_bounds[b_idx]
             canvas[y0:y1, :] = warped_band[y0:y1, :]
 
         ok, refined_canvas = verify_and_refine_10_markers(canvas)
         if ok:
-            output_path.parent.mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(str(output_path), refined_canvas)
             return refined_canvas
 
     # TẦNG 2: NẮN 4 MỐC GÓC OMR THÍCH ỨNG (DÀNH CHO CAMERA DI ĐỘNG CẦM TAY)
     if corners_4 is not None:
         H_corners = cv2.getPerspectiveTransform(corners_4, tpl_corners)
-        canvas = cv2.warpPerspective(image_bgr, H_corners, (out_w, out_h), flags=cv2.INTER_CUBIC)
+        canvas = cv2.warpPerspective(image_bgr, H_corners, (out_w, out_h), flags=cv2.INTER_LINEAR)
         ok, refined_canvas = verify_and_refine_10_markers(canvas)
         if ok:
-            output_path.parent.mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(str(output_path), refined_canvas)
             return refined_canvas
 
     # TẦNG 3: DỰ PHÒNG VIỀN GIẤY A4 TRÊN NỀN BÀN (CHỈ CHẤP NHẬN NẾU ĐẠT XÁC THỰC MỐC PHIẾU OMR)
@@ -662,14 +651,28 @@ def align_sheet_4band(image_path: Union[str, Path, np.ndarray], output_path: Uni
             [out_w, out_h], [0, out_h]
         ], dtype=np.float32)
         H_paper = cv2.getPerspectiveTransform(paper_corners, dst_a4)
-        canvas_a4 = cv2.warpPerspective(image_bgr, H_paper, (out_w, out_h), flags=cv2.INTER_CUBIC)
+        canvas_a4 = cv2.warpPerspective(image_bgr, H_paper, (out_w, out_h), flags=cv2.INTER_LINEAR)
         ok, refined_canvas = verify_and_refine_10_markers(canvas_a4)
         if ok:
-            output_path.parent.mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(str(output_path), refined_canvas)
             return refined_canvas
 
     raise RuntimeError(
         "NOT_OMR_SHEET: Không nhận diện được đúng mẫu phiếu trả lời trắc nghiệm Bộ GD&ĐT. "
         "Hãy đảm bảo đưa đúng phiếu thi vào khung ngắm và đủ ánh sáng."
     )
+
+
+def align_sheet_4band(image_path: Union[str, Path, np.ndarray], output_path: Union[str, Path], hint_corners: Optional[np.ndarray] = None) -> Union[np.ndarray, Tuple[None, str]]:
+    """Wrapper tương thích ngược: đọc file nếu cần, gọi align_sheet_from_array và lưu output_path."""
+    if isinstance(image_path, np.ndarray):
+        raw_bgr = image_path
+    else:
+        raw_bgr = cv2.imread(str(image_path))
+        if raw_bgr is None:
+            raise FileNotFoundError(f"Không tìm thấy file: {image_path}")
+
+    refined_canvas = align_sheet_from_array(raw_bgr, hint_corners=hint_corners)
+    output_path = Path(output_path)
+    output_path.parent.mkdir(exist_ok=True, parents=True)
+    cv2.imwrite(str(output_path), refined_canvas)
+    return refined_canvas

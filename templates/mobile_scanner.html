@@ -439,6 +439,7 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
     let isGrading = false;
     let opticalInterval = null;
     let lock4Frames = 0;
+    let lastScanCooldownUntil = 0;
     let lastValidCornersNorm = null;
     let lastCornersPos = null;
     let deferredPrompt = null;
@@ -1333,8 +1334,8 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
           if (el) { el.classList.remove("unmatched"); el.classList.add("matched"); }
         });
 
-        // Tự động kích hoạt chụp chớp nhoáng ngay sau 2 chu kỳ ổn định (~150ms)
-        if (lock4Frames >= 2) {
+        // Tự động kích hoạt chụp chớp nhoáng ngay sau 2 chu kỳ ổn định (~150ms), có cooldown 0.8s giữa các bài
+        if (lock4Frames >= 2 && Date.now() >= lastScanCooldownUntil) {
           playBeep(true);
           if (navigator.vibrate) navigator.vibrate([40, 60, 40]);
           executeGradingProcess();
@@ -1397,25 +1398,26 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
       const vw = video.videoWidth || 1920;
       const vh = video.videoHeight || 1080;
 
-      // 1. Chụp nhanh 3 frame liên tiếp (cách nhau 40ms) và chọn frame sắc nét nhất (chống rung tay tức thời)
+      // 1. Chụp nhanh 2 frame liên tiếp (cách nhau 35ms) và chọn frame sắc nét nhất (chống rung tay tức thời)
       let bestCanvas = null;
       let maxSharpness = -1;
 
-      for (let burstIdx = 0; burstIdx < 3; burstIdx++) {
+      for (let burstIdx = 0; burstIdx < 2; burstIdx++) {
         const tempCanvas = document.createElement("canvas");
         tempCanvas.width = vw;
         tempCanvas.height = vh;
         const tempCtx = tempCanvas.getContext("2d", { willReadFrequently: true });
         tempCtx.drawImage(video, 0, 0, vw, vh);
 
-        // Tính nhanh chỉ số độ nét vi sai trên vùng trung tâm
+        // Tính nhanh chỉ số độ nét vi sai trên vùng trung tâm (bước nhảy step = 4 pixel -> < 3ms)
         let sharpness = 0;
         try {
           const sampleW = 140, sampleH = 140;
           const sampleX = Math.round(vw * 0.5 - sampleW / 2);
           const sampleY = Math.round(vh * 0.5 - sampleH / 2);
           const sampleData = tempCtx.getImageData(sampleX, sampleY, sampleW, sampleH).data;
-          for (let i = 0; i < sampleData.length - 8; i += 8) {
+          const byteStep = 4 * 4; // step = 4 pixels * 4 RGBA bytes
+          for (let i = 0; i < sampleData.length - 8; i += byteStep) {
             sharpness += Math.abs(sampleData[i] - sampleData[i + 4]);
           }
         } catch (e) {
@@ -1427,12 +1429,12 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
           bestCanvas = tempCanvas;
         }
 
-        if (burstIdx < 2) {
-          await new Promise(r => setTimeout(r, 40));
+        if (burstIdx < 1) {
+          await new Promise(r => setTimeout(r, 35));
         }
       }
 
-      // 2. Cắt đúng vùng 4 góc phiếu mở rộng 7% an toàn, thu phóng cạnh dài nhất về max 1650px
+      // 2. Crop sát vùng 4 góc phiếu mở rộng 4.5% lề an toàn, thu phóng cạnh dài nhất về max 1150px
       const finalCanvas = document.getElementById("captureCanvas");
       let cornersToSend = null;
 
@@ -1442,15 +1444,16 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
         const minX = Math.min(...xs), maxX = Math.max(...xs);
         const minY = Math.min(...ys), maxY = Math.max(...ys);
         const bw = maxX - minX, bh = maxY - minY;
-        const margin = Math.max(bw, bh) * 0.07;
+        const padX = bw * 0.045;
+        const padY = bh * 0.045;
 
-        const cropX = Math.max(0, Math.floor(minX - margin));
-        const cropY = Math.max(0, Math.floor(minY - margin));
-        const cropW = Math.min(vw - cropX, Math.ceil(bw + 2 * margin));
-        const cropH = Math.min(vh - cropY, Math.ceil(bh + 2 * margin));
+        const cropX = Math.max(0, Math.floor(minX - padX));
+        const cropY = Math.max(0, Math.floor(minY - padY));
+        const cropW = Math.min(vw - cropX, Math.ceil(bw + 2 * padX));
+        const cropH = Math.min(vh - cropY, Math.ceil(bh + 2 * padY));
 
         const maxDim = Math.max(cropW, cropH);
-        const scale = maxDim > 1650 ? (1650.0 / maxDim) : 1.0;
+        const scale = maxDim > 1150 ? (1150.0 / maxDim) : 1.0;
         const targetW = Math.round(cropW * scale);
         const targetH = Math.round(cropH * scale);
 
@@ -1466,7 +1469,7 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
         ]);
       } else {
         const maxDim = Math.max(vw, vh);
-        const scale = maxDim > 1650 ? (1650.0 / maxDim) : 1.0;
+        const scale = maxDim > 1150 ? (1150.0 / maxDim) : 1.0;
         finalCanvas.width = Math.round(vw * scale);
         finalCanvas.height = Math.round(vh * scale);
         const fCtx = finalCanvas.getContext("2d");
@@ -1481,7 +1484,7 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
           return;
         }
         await postGradeImageBlob(blob, `Mobile_${Date.now()}.jpg`, cornersToSend);
-      }, "image/jpeg", 0.86);
+      }, "image/jpeg", 0.78);
     }
 
     // =========================================================================
@@ -1532,20 +1535,29 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
             playBeep(false);
             if (navigator.vibrate) navigator.vibrate([100, 60, 100]);
             showNotificationToast(sub.error_msg || "Ảnh chụp không đạt chuẩn. Vui lòng chụp thẳng và đủ sáng.", true);
-            await refreshSessionData();
-            renderSubmissionsList();
+            refreshSessionData().then(() => renderSubmissionsList());
           } else {
+            // 1. Phản hồi âm thanh, rung & hiển thị điểm tức thì
             playBeep(true);
             if (navigator.vibrate) navigator.vibrate([60, 40, 120]);
             showResultToast(sub);
-            await refreshSessionData();
-            renderSubmissionsList();
+
+            // 2. Cập nhật nhanh số đếm (+1 bài) ngay lập tức không đợi tải lại session
+            const badgeEl = document.getElementById("badgeSubCount");
+            if (badgeEl) {
+              const nextCount = data.total_submissions_count || ((sessionData.submissions ? sessionData.submissions.length : 0) + 1);
+              badgeEl.innerText = `${nextCount} bài`;
+            }
+
+            // 3. Đồng bộ lại danh sách ngầm (non-blocking) để mở khóa quét ngay sau 0.8s cooldown
+            refreshSessionData().then(() => renderSubmissionsList());
           }
         }
       } catch (err) {
         playBeep(false);
         showNotificationToast("Lỗi kết nối máy chủ: " + err.message, true);
       } finally {
+        lastScanCooldownUntil = Date.now() + 800;
         isGrading = false;
         lock4Frames = 0;
         resetGuidanceHUD();
@@ -1559,9 +1571,9 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
       const guideSubText = document.getElementById("guideText");
       if (guideBox && guideBoxText && guideIcon && guideSubText) {
         guideIcon.innerText = "🎯";
-        guideBoxText.innerText = "Đưa 4 góc mốc đen vào khung";
-        guideSubText.innerText = "Căn 4 mốc đen góc vào 4 khung ngắm. Đủ 4 mốc máy sẽ tự chụp.";
-        guideBox.className = "text-center text-[11px] font-bold text-amber-300 bg-black/85 px-3 py-1.5 rounded-full mx-auto shadow-xl border border-amber-500/50 transition-all flex items-center gap-1.5 pointer-events-auto";
+        guideBoxText.innerText = "Không phải phiếu OMR - Đưa phiếu vào khung";
+        guideSubText.innerText = "Căn 4 mốc đen góc vào 4 khung ngắm. Đúng phiếu OMR máy sẽ tự chụp.";
+        guideBox.className = "text-center text-[11px] font-bold text-rose-200 bg-rose-950/90 px-3.5 py-1.5 rounded-full mx-auto shadow-xl border border-rose-500/60 transition-all flex items-center gap-1.5 pointer-events-auto";
       }
     }
 
