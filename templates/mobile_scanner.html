@@ -1285,6 +1285,10 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
         }
       }
 
+      if (!isValidSheet) {
+        lastValidCornersNorm = null;
+      }
+
       // Cập nhật trạng thái giao diện UI & Tự động chụp
       updateGuidanceState(isValidSheet, cornersCount, matchedIntermediates.length, TL, TR, BR, BL, isStable);
     }
@@ -1453,7 +1457,7 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
         const cropH = Math.min(vh - cropY, Math.ceil(bh + 2 * padY));
 
         const maxDim = Math.max(cropW, cropH);
-        const scale = maxDim > 1150 ? (1150.0 / maxDim) : 1.0;
+        const scale = maxDim > 1450 ? (1450.0 / maxDim) : 1.0;
         const targetW = Math.round(cropW * scale);
         const targetH = Math.round(cropH * scale);
 
@@ -1469,7 +1473,7 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
         ]);
       } else {
         const maxDim = Math.max(vw, vh);
-        const scale = maxDim > 1150 ? (1150.0 / maxDim) : 1.0;
+        const scale = maxDim > 1450 ? (1450.0 / maxDim) : 1.0;
         finalCanvas.width = Math.round(vw * scale);
         finalCanvas.height = Math.round(vh * scale);
         const fCtx = finalCanvas.getContext("2d");
@@ -1484,7 +1488,7 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
           return;
         }
         await postGradeImageBlob(blob, `Mobile_${Date.now()}.jpg`, cornersToSend);
-      }, "image/jpeg", 0.78);
+      }, "image/jpeg", 0.84);
     }
 
     // =========================================================================
@@ -1803,6 +1807,64 @@ Câu 2: 3,14" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.
         }
       } catch (err) {
         showNotificationToast("Lỗi kết nối khi nạp đáp án: " + err.message, true);
+      }
+    }
+
+    // =========================================================================
+    // DÁN ĐÁP ÁN NHANH TRÊN MOBILE (SMART PASTE)
+    // =========================================================================
+    function openSmartPasteMobile() {
+      document.getElementById("mobSmartPasteText").value = "";
+      const fb = document.getElementById("mobSmartPasteFeedback");
+      fb.className = "hidden";
+      fb.innerText = "";
+      document.getElementById("mobileSmartPasteModal").classList.remove("hidden");
+    }
+
+    function closeSmartPasteMobile() {
+      document.getElementById("mobileSmartPasteModal").classList.add("hidden");
+    }
+
+    async function submitSmartPasteMobile() {
+      const text = document.getElementById("mobSmartPasteText").value.trim();
+      const defaultMade = document.getElementById("mobDefaultMade").value.trim() || "0001";
+      const fb = document.getElementById("mobSmartPasteFeedback");
+      const btn = document.getElementById("btnMobSubmitSmartPaste");
+
+      if (!text) {
+        fb.className = "text-xs p-2 rounded bg-rose-950 text-rose-300 border border-rose-800 block";
+        fb.innerText = "Vui lòng nhập hoặc dán nội dung đáp án.";
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = "Đang nạp...";
+      fb.className = "text-xs p-2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 block";
+      fb.innerText = "Đang nhận diện cú pháp...";
+
+      try {
+        const res = await fetch("/api/smart-paste-answer-key", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: text, default_made: defaultMade })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Lỗi xử lý đáp án");
+
+        fb.className = "text-xs p-2 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 block";
+        fb.innerHTML = `✓ Đã nạp mã đề: <b>${data.codes_loaded.join(", ")}</b>! Đã chấm lại ${data.re_graded_count} bài.`;
+        showNotificationToast(`Đã nạp đáp án mã đề ${data.codes_loaded.join(", ")}!`, false);
+
+        setTimeout(async () => {
+          closeSmartPasteMobile();
+          await refreshSessionData();
+        }, 1200);
+      } catch (err) {
+        fb.className = "text-xs p-2 rounded bg-rose-950 text-rose-300 border border-rose-800 block";
+        fb.innerText = "Lỗi: " + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "Nạp Đáp Án";
       }
     }
 

@@ -1,5 +1,5 @@
-// Service Worker cho OMR Mobile PWA (v12 - Fast End-to-End & Network-First)
-const CACHE_NAME = 'omr-pwa-v12';
+// Service Worker cho OMR Mobile PWA (v14 - Stabilized Homography & Smart Paste)
+const CACHE_NAME = 'omr-pwa-v14';
 const ASSETS_TO_CACHE = [
   '/scanner',
   '/manifest.json',

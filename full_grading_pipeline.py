@@ -68,63 +68,70 @@ class Part3ShadowfixReader:
     def __init__(self, p3_coords: List[Dict[str, Any]], scale: float, template_ink_map: Optional[np.ndarray] = None):
         self.coords = p3_coords
         self.scale = scale
-        self.core_r = 4.5 * scale
-        self.search_r = int(round(4.5 * scale))
-        self.ring_in = 7.2 * scale
-        self.ring_out = 10.8 * scale
+        self.core_r = max(1, int(round(3.5 * scale)))
+        self.search_r = 2
+        self.tight_sr = 1
         self.template_ink_map = template_ink_map
 
-    def _build_gradient_response(self, gray: np.ndarray) -> np.ndarray:
-        smoothed = cv2.GaussianBlur(gray, (0, 0), sigmaX=max(0.8, 1.0 * self.scale), sigmaY=max(0.8, 1.0 * self.scale))
-        gx = cv2.Sobel(smoothed, cv2.CV_32F, 1, 0, ksize=3)
-        gy = cv2.Sobel(smoothed, cv2.CV_32F, 0, 1, ksize=3)
-        mag = cv2.magnitude(gx, gy)
-        r = int(np.ceil(self.ring_out))
-        yy, xx = np.ogrid[-r:r+1, -r:r+1]
-        dist = np.sqrt(xx * xx + yy * yy)
-        mask = ((dist >= self.ring_in) & (dist <= self.ring_out)).astype(np.float32)
-        kernel = mask / float(mask.sum()) if mask.sum() > 0 else mask
-        return cv2.filter2D(mag, cv2.CV_32F, kernel, borderType=cv2.BORDER_REFLECT)
+        # Precompute disk kernel và ma trận phạt khoảng cách (bước nhảy 1px, phạt 0.35*dist)
+        rc = self.core_r
+        yy_c, xx_c = np.ogrid[-rc : rc + 1, -rc : rc + 1]
+        c_mask = (xx_c * xx_c + yy_c * yy_c <= rc * rc).astype(np.float32)
+        c_sum = float(c_mask.sum())
+        if c_sum > 0:
+            c_mask /= c_sum
+        self._core_mask = c_mask
 
-    def _refine_and_score(self, ink_map: np.ndarray, resp: np.ndarray, x: float, y: float) -> Tuple[float, Tuple[int, int]]:
-        xi, yi = int(round(x)), int(round(y))
-        h, w = resp.shape
-        x1, x2 = max(0, xi - self.search_r), min(w, xi + self.search_r + 1)
-        y1, y2 = max(0, yi - self.search_r), min(h, yi + self.search_r + 1)
-        patch = resp[y1:y2, x1:x2]
-        yy, xx = np.mgrid[y1:y2, x1:x2]
-        adjusted = patch - 0.4 * np.sqrt((xx - x) ** 2 + (yy - y) ** 2)
-        iy, ix = np.unravel_index(np.argmax(adjusted), adjusted.shape)
-        cx, cy = int(x1 + ix), int(y1 + iy)
+        sr = self.search_r
+        yy_p, xx_p = np.mgrid[-sr : sr + 1, -sr : sr + 1]
+        self._penalty_grid = (0.35 * np.hypot(xx_p, yy_p)).astype(np.float32)
 
-        r = max(1, int(round(self.core_r)))
-        if cx - r < 0 or cy - r < 0 or cx + r >= w or cy + r >= h:
-            return 0.0, (cx, cy)
-        yy, xx = np.ogrid[-r:r+1, -r:r+1]
-        val = float(np.mean(ink_map[cy - r:cy + r + 1, cx - r:cx + r + 1][xx * xx + yy * yy <= r * r]))
+        tsr = self.tight_sr
+        yy_t, xx_t = np.mgrid[-tsr : tsr + 1, -tsr : tsr + 1]
+        self._tight_penalty_grid = (0.35 * np.hypot(xx_t, yy_t)).astype(np.float32)
 
-        # Trừ nền mực từ phôi gốc nếu có (chỉ trừ mực in sẵn > 0, không trừ số âm)
+    def _refine_and_score(self, ink_map: np.ndarray, x: float, y: float, tight: bool = False) -> Tuple[float, Tuple[int, int]]:
+        """Dịch tâm trực tiếp theo độ đậm mực thuần (net_ink) trong bán kính nhỏ giữ trọn trong lòng ô tròn."""
+        xi0, yi0 = int(round(x)), int(round(y))
+        h, w = ink_map.shape
+        rc = self.core_r
+        sr = self.tight_sr if tight else self.search_r
+        pen_grid = self._tight_penalty_grid if tight else self._penalty_grid
+        pad = sr + rc
+
+        if xi0 - pad < 0 or yi0 - pad < 0 or xi0 + pad >= w or yi0 + pad >= h:
+            if xi0 - rc < 0 or yi0 - rc < 0 or xi0 + rc >= w or yi0 + rc >= h:
+                return 0.0, (xi0, yi0)
+            patch = ink_map[yi0 - rc : yi0 + rc + 1, xi0 - rc : xi0 + rc + 1]
+            mask = self._core_mask > 0
+            val = float(np.mean(patch[mask]))
+            if self.template_ink_map is not None:
+                th, tw = self.template_ink_map.shape
+                if xi0 - rc >= 0 and yi0 - rc >= 0 and xi0 + rc < tw and yi0 + rc < th:
+                    tpl_patch = self.template_ink_map[yi0 - rc : yi0 + rc + 1, xi0 - rc : xi0 + rc + 1]
+                    val = max(0.0, val - max(0.0, float(np.mean(tpl_patch[mask]))) * 0.90)
+            return max(0.0, val), (xi0, yi0)
+
+        patch_ink = ink_map[yi0 - pad : yi0 + pad + 1, xi0 - pad : xi0 + pad + 1]
         if self.template_ink_map is not None:
             th, tw = self.template_ink_map.shape
-            if cx - r >= 0 and cy - r >= 0 and cx + r < tw and cy + r < th:
-                tpl_val = max(0.0, float(np.mean(self.template_ink_map[cy - r:cy + r + 1, cx - r:cx + r + 1][xx * xx + yy * yy <= r * r])))
+            if yi0 - pad >= 0 and xi0 - pad >= 0 and yi0 + pad + 1 <= th and xi0 + pad + 1 <= tw:
+                patch_tpl = self.template_ink_map[yi0 - pad : yi0 + pad + 1, xi0 - pad : xi0 + pad + 1]
+                patch_net = np.maximum(0.0, patch_ink - np.maximum(0.0, patch_tpl) * 0.90)
             else:
-                tpl_val = 0.0
-            net_val = max(0.0, val - tpl_val * 0.90)
+                patch_net = np.maximum(0.0, patch_ink)
         else:
-            net_val = max(0.0, val)
+            patch_net = np.maximum(0.0, patch_ink)
 
-        return net_val, (cx, cy)
+        core_resp = cv2.filter2D(patch_net, -1, self._core_mask)
+        search_win = core_resp[pad - sr : pad + sr + 1, pad - sr : pad + sr + 1]
+        adjusted = np.maximum(0.0, search_win - pen_grid)
+        iy, ix = np.unravel_index(np.argmax(adjusted), adjusted.shape)
+        cx = int(xi0 + ix - sr)
+        cy = int(yi0 + iy - sr)
+        return float(adjusted[iy, ix]), (cx, cy)
 
     def read_filtered(self, gray: np.ndarray, ink_map: np.ndarray, active_q_nums: List[int]) -> Tuple[Dict[int, Dict[str, Any]], List[Dict[str, str]]]:
-        # Tối ưu: Chỉ tính gradient response cho vùng Phần III (Y từ 1680 trở đi)
-        y_start = 1680
-        h_full, w_full = gray.shape[:2]
-        gray_p3 = gray[y_start:h_full, :]
-        resp_p3 = self._build_gradient_response(gray_p3)
-        resp = np.zeros((h_full, w_full), dtype=np.float32)
-        resp[y_start:h_full, :] = resp_p3
-
         results = {}
         anomalies = []
         active_set = {int(q) for q in active_q_nums}
@@ -136,15 +143,45 @@ class Part3ShadowfixReader:
 
             q_errors = []
 
-            # Đọc dấu âm (-)
-            s_val, _ = self._refine_and_score(ink_map, resp, q["sign"][0], q["sign"][1])
-            has_minus = s_val >= 14.5
+            # Đọc 4 cột chữ số (0..9) trước để lấy nền động cục bộ của câu (chống bóng đổ & nhiễu nén JPEG)
+            col_digits: List[List[str]] = [[] for _ in range(4)]
+            col_bgs: List[float] = []
+            for col in range(4):
+                net_scores = [
+                    self._refine_and_score(ink_map, q["digits"][str(d)][col][0], q["digits"][str(d)][col][1], tight=False)[0]
+                    for d in range(10)
+                ]
 
-            # Đọc dấu phẩy (,)
+                # Nền động cột = phân vị 50%
+                col_bg = float(np.percentile(net_scores, 50))
+                col_bgs.append(col_bg)
+                rel_scores = [max(0.0, s - col_bg) for s in net_scores]
+
+                ranked = sorted(enumerate(rel_scores), key=lambda x: x[1], reverse=True)
+                top_d, top_rel = ranked[0]
+                sec_d, sec_rel = ranked[1]
+
+                # Kết luận tô đúp (ngưỡng chặt hơn để tránh bắt nhầm rìa mực ô liền kề)
+                if top_rel >= 16.5 and sec_rel >= 15.5 and (top_rel - sec_rel) < 6.5:
+                    col_digits[col] = [str(top_d), str(sec_d)]
+                # Kết luận tô hợp lệ 1 chữ số (bắt trọn nét chì nhạt, ổn định tuyệt đối)
+                elif top_rel >= 10.0 and (top_rel - sec_rel) >= 5.8:
+                    col_digits[col] = [str(top_d)]
+                else:
+                    col_digits[col] = []
+
+            q_bg = float(np.median(col_bgs)) if col_bgs else 0.0
+
+            # Đọc dấu âm (-) và dấu phẩy (,) có bù trừ nền câu q_bg
+            s_raw, _ = self._refine_and_score(ink_map, q["sign"][0], q["sign"][1], tight=True)
+            s_val = max(0.0, s_raw - q_bg)
+            has_minus = s_val >= 13.0
+
             comma_hits = []
             for idx, cpos in enumerate(q["comma_positions"]):
-                c_val, _ = self._refine_and_score(ink_map, resp, cpos[0], cpos[1])
-                if c_val >= 14.5:
+                c_raw, _ = self._refine_and_score(ink_map, cpos[0], cpos[1], tight=True)
+                c_val = max(0.0, c_raw - q_bg)
+                if c_val >= 13.0:
                     comma_hits.append(idx + 1)
 
             if len(comma_hits) > 1:
@@ -154,31 +191,6 @@ class Part3ShadowfixReader:
                 comma_opt = comma_hits[0]
             else:
                 comma_opt = None
-
-            # Đọc 4 cột chữ số (0..9)
-            col_digits: List[List[str]] = [[] for _ in range(4)]
-            for col in range(4):
-                net_scores = []
-                for d in range(10):
-                    val, _ = self._refine_and_score(ink_map, resp, q["digits"][str(d)][col][0], q["digits"][str(d)][col][1])
-                    net_scores.append(val)
-
-                # Nền động cột = phân vị 60%
-                col_bg = float(np.percentile(net_scores, 60))
-                rel_scores = [max(0.0, s - col_bg) for s in net_scores]
-
-                ranked = sorted(enumerate(rel_scores), key=lambda x: x[1], reverse=True)
-                top_d, top_rel = ranked[0]
-                sec_d, sec_rel = ranked[1]
-
-                # Kết luận tô đúp
-                if top_rel >= 15.5 and sec_rel >= 14.5 and (top_rel - sec_rel) < 8.0:
-                    col_digits[col] = [str(top_d), str(sec_d)]
-                # Kết luận tô hợp lệ 1 chữ số (bắt trọn nét chì nhạt, không bỏ sót)
-                elif top_rel >= 11.5 and (top_rel - sec_rel) >= 6.5:
-                    col_digits[col] = [str(top_d)]
-                else:
-                    col_digits[col] = []
 
             col_filled = [len(digits) > 0 for digits in col_digits]
 
@@ -425,13 +437,13 @@ class FullGradingPipeline:
                 sec_d, sec_net = ranked[1]
                 top_raw = raw_scores[top_d]
 
-                if sec_net >= 13.5 and (top_net - sec_net) < 8.5:
+                if sec_net >= 13.5 and (top_net - sec_net) < 7.0:
                     res.append(f"[{top_d}{sec_d}]")
                     anomalies.append({
                         "type": f"{grid_name}_DOUBLE_FILL",
                         "msg": f"{grid_name} Cột {col_idx} tô đúp ({top_d} và {sec_d})"
                     })
-                elif top_net >= 12.0 and top_raw >= 15.5:
+                elif top_net >= 9.5 and top_raw >= 12.5:
                     res.append(str(top_d))
                 else:
                     res.append("?")
@@ -526,10 +538,10 @@ class FullGradingPipeline:
             row_bg = float(np.percentile(list(scores.values()), 50))
             top_rel = top_val - row_bg
 
-            if sec_val >= 15.0 and (top_val - sec_val) < 8.0:
+            if sec_val >= 14.5 and (top_val - sec_val) < 7.0:
                 p1_res[q_num] = "MULTIPLE"
                 p1_anom.append({"type": "P1_DOUBLE_FILL", "msg": f"Phần I Câu {q_num} tô đúp ({top_opt} và {sec_opt})"})
-            elif top_val >= 14.0 or (top_rel >= 10.0 and (top_val - sec_val) >= 6.8):
+            elif top_val >= 11.5 or (top_rel >= 8.5 and (top_val - sec_val) >= 5.5):
                 p1_res[q_num] = top_opt
             else:
                 p1_res[q_num] = ""
@@ -549,10 +561,10 @@ class FullGradingPipeline:
                 st = self._eval_bubble_ink_refined(ink_map, tx, ty, r_core=8, search_r=8)
                 sf = self._eval_bubble_ink_refined(ink_map, fx, fy, r_core=8, search_r=8)
 
-                if st >= 18.0 and sf >= 18.0 and abs(st - sf) < 8.5:
+                if st >= 16.5 and sf >= 16.5 and abs(st - sf) < 7.5:
                     row_dict[rk] = "ĐS"
                     p2_anom.append({"type": "P2_DOUBLE_FILL", "msg": f"Phần II Câu {q_num}{rk} tô cả Đúng và Sai"})
-                elif max(st, sf) >= 11.0 and abs(st - sf) >= 6.8:
+                elif max(st, sf) >= 9.0 and abs(st - sf) >= 5.5:
                     row_dict[rk] = "Đ" if st > sf else "S"
                 else:
                     row_dict[rk] = ""

@@ -782,7 +782,7 @@ async def update_submission(payload: UpdateSubmissionRequest):
         else:
             sub["status"] = "GRADED"
 
-        sub["has_error"] = (sub["status"] == "NEEDS_REVIEW")
+        sub["has_error"] = False
         sub["error_msg"] = None
         sub["updated_at"] = datetime.now().isoformat()
 

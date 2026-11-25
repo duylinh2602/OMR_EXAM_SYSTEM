@@ -397,10 +397,12 @@ def verify_and_refine_10_markers(canvas_bgr: np.ndarray) -> Tuple[bool, np.ndarr
     if np.median(gray) < 135.0:
         return False, canvas_bgr
 
-    kernel_7 = np.ones((7, 7), dtype=np.float32) / 49.0
-    r_in = 16
-    r_out = 24
-    search_w = 50
+    # Lõi tìm kiếm khớp đúng kích thước mốc vuông (~33x33px) bằng hộp lọc 29x29
+    # Giúp tâm khóa đúng giữa hình vuông, không trượt vào cạnh hoặc viền bảng
+    kernel_29 = np.ones((29, 29), dtype=np.float32) / 841.0
+    r_in = 22
+    r_out = 30
+    search_w = 42
 
     ref_left = []
     ref_right = []
@@ -408,8 +410,6 @@ def verify_and_refine_10_markers(canvas_bgr: np.ndarray) -> Tuple[bool, np.ndarr
     is_marker_valid_R = []
     valid_count = 0
     corner_valid = 0
-
-    m_ratios = [0.0, 0.324, 0.543, 0.682, 1.0]
 
     for side, tpl_list, ref_list, valid_flags in [
         ('L', TPL_LEFT_5, ref_left, is_marker_valid_L),
@@ -420,13 +420,13 @@ def verify_and_refine_10_markers(canvas_bgr: np.ndarray) -> Tuple[bool, np.ndarr
             x0, x1 = max(0, cx - search_w), min(CANONICAL_WIDTH, cx + search_w + 1)
             y0, y1 = max(0, cy - search_w), min(CANONICAL_HEIGHT, cy + search_w + 1)
             patch = gray[y0:y1, x0:x1]
-            if patch.shape[0] < 15 or patch.shape[1] < 15:
+            if patch.shape[0] < 32 or patch.shape[1] < 32:
                 ref_list.append((float(cx), float(cy)))
                 valid_flags.append(False)
                 continue
 
-            blur = cv2.filter2D(patch.astype(np.float32), -1, kernel_7)
-            b = 7
+            blur = cv2.filter2D(patch.astype(np.float32), -1, kernel_29)
+            b = 14
             if blur.shape[0] > 2 * b and blur.shape[1] > 2 * b:
                 inner = blur[b:-b, b:-b]
                 min_pos = np.unravel_index(np.argmin(inner), inner.shape)
@@ -435,8 +435,8 @@ def verify_and_refine_10_markers(canvas_bgr: np.ndarray) -> Tuple[bool, np.ndarr
             else:
                 best_y, best_x = cy, cx
 
-            core_patch = gray[max(0, best_y - 3):min(CANONICAL_HEIGHT, best_y + 4),
-                              max(0, best_x - 3):min(CANONICAL_WIDTH, best_x + 4)]
+            core_patch = gray[max(0, best_y - 4):min(CANONICAL_HEIGHT, best_y + 5),
+                              max(0, best_x - 4):min(CANONICAL_WIDTH, best_x + 5)]
             core_mean = float(np.mean(core_patch)) if core_patch.size > 0 else 255.0
 
             ry0, ry1 = max(0, best_y - r_out), min(CANONICAL_HEIGHT, best_y + r_out + 1)
@@ -450,11 +450,13 @@ def verify_and_refine_10_markers(canvas_bgr: np.ndarray) -> Tuple[bool, np.ndarr
             if np.any(ring_mask):
                 ring_vals = patch_ring[ring_mask]
                 p75 = float(np.percentile(ring_vals, 75))
+                p50 = float(np.percentile(ring_vals, 50))
             else:
                 p75 = 0.0
+                p50 = 0.0
 
             contrast = p75 - core_mean
-            if core_mean < 145.0 and p75 >= 155.0 and contrast >= 25.0 and core_mean < 0.85 * p75:
+            if core_mean < 155.0 and p75 >= 145.0 and p50 >= 115.0 and contrast >= 18.0 and core_mean < 0.88 * p75:
                 valid_count += 1
                 if idx in (0, 4):
                     corner_valid += 1
@@ -468,76 +470,57 @@ def verify_and_refine_10_markers(canvas_bgr: np.ndarray) -> Tuple[bool, np.ndarr
     if not is_valid:
         return False, canvas_bgr
 
-    # Nội suy tuyến tính cho mốc trung gian nào chưa hợp lệ dựa trên 2 mốc góc M0 và M4
-    for ref_list, valid_flags, tpl_list in [
-        (ref_left, is_marker_valid_L, TPL_LEFT_5),
-        (ref_right, is_marker_valid_R, TPL_RIGHT_5)
+    # Lọc thẳng hàng (collinearity check sai số <= 16px) cho từng bên lề trái / phải
+    for ref_list, valid_flags in [
+        (ref_left, is_marker_valid_L),
+        (ref_right, is_marker_valid_R)
     ]:
-        p0 = ref_list[0] if valid_flags[0] else (float(tpl_list[0][0]), float(tpl_list[0][1]))
-        p4 = ref_list[4] if valid_flags[4] else (float(tpl_list[4][0]), float(tpl_list[4][1]))
-
-        # Kiểm tra collinearity: 5 mốc cùng bên phải nằm gần 1 đường thẳng
-        valid_indices = [i for i in range(5) if valid_flags[i]]
-        valid_xs = [ref_list[i][0] for i in valid_indices]
-        valid_ys = [ref_list[i][1] for i in valid_indices]
-        if len(valid_indices) >= 3:
+        for _ in range(2):
+            valid_indices = [i for i in range(5) if valid_flags[i]]
+            if len(valid_indices) < 3:
+                break
+            valid_xs = np.array([ref_list[i][0] for i in valid_indices], dtype=np.float32)
+            valid_ys = np.array([ref_list[i][1] for i in valid_indices], dtype=np.float32)
             poly_line = np.polyfit(valid_ys, valid_xs, 1)
-            x_pred = np.polyval(poly_line, valid_ys)
-            x_errs = np.abs(np.array(valid_xs) - x_pred)
-            # Nếu có mốc lệch > 18px khỏi đường hồi quy, đánh dấu invalid và nội suy lại
-            for vi, xerr in enumerate(x_errs):
-                if xerr > 18.0:
-                    orig_idx = valid_indices[vi]
-                    if orig_idx not in (0, 4):
-                        valid_flags[orig_idx] = False
+            x_errs = np.abs(valid_xs - np.polyval(poly_line, valid_ys))
+            worst_vi = int(np.argmax(x_errs))
+            if x_errs[worst_vi] > 16.0:
+                worst_orig = valid_indices[worst_vi]
+                # Nếu có >= 4 điểm và góc bị lệch hoặc bất kỳ điểm trung gian nào lệch > 16px -> loại bỏ
+                if worst_orig not in (0, 4) or len(valid_indices) >= 4:
+                    valid_flags[worst_orig] = False
+                    continue
+            break
 
-        for i in range(1, 4):
-            if not valid_flags[i]:
-                t = m_ratios[i]
-                inter_x = p0[0] + t * (p4[0] - p0[0])
-                inter_y = p0[1] + t * (p4[1] - p0[1])
-                ref_list[i] = (inter_x, inter_y)
+    # Gom tất cả các mốc hợp lệ thành src_pts và dst_pts để tính 1 ma trận Homography duy nhất
+    src_pts = []
+    dst_pts = []
+    has_top = False
+    has_bot = False
+    for side_flags, side_refs, side_tpl in [
+        (is_marker_valid_L, ref_left, TPL_LEFT_5),
+        (is_marker_valid_R, ref_right, TPL_RIGHT_5),
+    ]:
+        for idx in range(5):
+            if side_flags[idx]:
+                src_pts.append(side_refs[idx])
+                dst_pts.append((float(side_tpl[idx][0]), float(side_tpl[idx][1])))
+                if idx in (0, 1):
+                    has_top = True
+                if idx in (3, 4):
+                    has_bot = True
 
-    ref_left = np.array(ref_left, dtype=np.float32)
-    ref_right = np.array(ref_right, dtype=np.float32)
+    if len(src_pts) >= 6 and has_top and has_bot:
+        src_arr = np.array(src_pts, dtype=np.float32)
+        dst_arr = np.array(dst_pts, dtype=np.float32)
+        H_global, _ = cv2.findHomography(src_arr, dst_arr, method=0)
+        if H_global is not None:
+            refined_canvas = cv2.warpPerspective(
+                canvas_bgr, H_global, (CANONICAL_WIDTH, CANONICAL_HEIGHT), flags=cv2.INTER_LINEAR
+            )
+            return True, refined_canvas
 
-    # Nắn tinh chỉnh 4 dải (4-band perspective refinement)
-    # Kiểm tra offset lệch: nếu bất kỳ mốc nào lệch > 35px so với template,
-    # giữ flat 4-corner warp thay vì warp 4-band (tránh vặn méo Phần III)
-    max_offset = 0.0
-    for i in range(5):
-        dx_l = abs(ref_left[i][0] - float(TPL_LEFT_5[i][0]))
-        dy_l = abs(ref_left[i][1] - float(TPL_LEFT_5[i][1]))
-        dx_r = abs(ref_right[i][0] - float(TPL_RIGHT_5[i][0]))
-        dy_r = abs(ref_right[i][1] - float(TPL_RIGHT_5[i][1]))
-        max_offset = max(max_offset, dx_l, dy_l, dx_r, dy_r)
-
-    if max_offset > 35.0:
-        # Mốc lệch quá nhiều → giữ flat canvas (đã warp 4-corner ở bước trước)
-        return True, canvas_bgr
-
-    refined_canvas = np.zeros_like(canvas_bgr)
-    band_bounds = [
-        (0, int(round(TPL_LEFT_5[1, 1]))),
-        (int(round(TPL_LEFT_5[1, 1])), int(round(TPL_LEFT_5[2, 1]))),
-        (int(round(TPL_LEFT_5[2, 1])), int(round(TPL_LEFT_5[3, 1]))),
-        (int(round(TPL_LEFT_5[3, 1])), CANONICAL_HEIGHT),
-    ]
-    for b_idx in range(4):
-        src_quad = np.array([
-            ref_left[b_idx], ref_right[b_idx],
-            ref_right[b_idx + 1], ref_left[b_idx + 1]
-        ], dtype=np.float32)
-        dst_quad = np.array([
-            TPL_LEFT_5[b_idx], TPL_RIGHT_5[b_idx],
-            TPL_RIGHT_5[b_idx + 1], TPL_LEFT_5[b_idx + 1]
-        ], dtype=np.float32)
-        H_band = cv2.getPerspectiveTransform(src_quad, dst_quad)
-        warped_band = cv2.warpPerspective(canvas_bgr, H_band, (CANONICAL_WIDTH, CANONICAL_HEIGHT), flags=cv2.INTER_LINEAR)
-        y0, y1 = band_bounds[b_idx]
-        refined_canvas[y0:y1, :] = warped_band[y0:y1, :]
-
-    return True, refined_canvas
+    return True, canvas_bgr
 
 
 def verify_aligned_omr_template(canvas_bgr: np.ndarray) -> bool:
